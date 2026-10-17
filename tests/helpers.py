@@ -1,8 +1,9 @@
 """Importable git fixture builders, shared by every test module.
 
-Test modules import these directly (``from tests.helpers import commit,
-make_repo, run``); ``tests/conftest.py`` re-exports ``make_repo`` and
-``clone_local`` as pytest fixtures.
+These are plain functions, not pytest fixtures: a test calls ``make_repo`` at
+the exact path it wants the repository at, which a fixture cannot do without
+inventing a second path to ask for one (``from tests.helpers import commit,
+make_repo, run``). There is no conftest to go with them.
 
 Fixture setup goes through the same ``git_ferret.gitcmd`` seam as the code
 under test. Nothing here touches ``subprocess``: ``gitcmd.py`` is the only
