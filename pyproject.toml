@@ -9,7 +9,7 @@ name = "git-ferret"
 version = "0.1.0"
 description = "Read-only reporting tool for auditing many local git repositories"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
 # 0.13 is the floor, not 0.12: a command annotated `str | None` fails to build
@@ -42,7 +42,7 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py314"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "RUF", "PLW1510"]
@@ -54,7 +54,7 @@ select = ["E", "F", "I", "UP", "B", "RUF", "PLW1510"]
 [tool.pyright]
 include = ["git_ferret", "tests", "scripts"]
 typeCheckingMode = "strict"
-pythonVersion = "3.11"
+pythonVersion = "3.14"
 reportMissingTypeStubs = false
 
 [tool.coverage.run]
@@ -63,7 +63,7 @@ source = ["git_ferret"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# The suite is at 97.9%, so 95 is a floor that catches a real drop without
-# failing on the drift between the Python the CI job runs and the one this
-# number was measured on.
+# The suite is at 98.9%, so 95 is a floor that catches a real drop. CI runs
+# only 3.14, the version this number was measured on, so there is no
+# cross-version drift left to absorb.
 fail_under = 95

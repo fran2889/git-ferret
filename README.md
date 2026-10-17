@@ -50,7 +50,7 @@ edits, but skipping keeps this tool from moving a working tree that has unsaved 
 
 ## Install
 
-Needs Python 3.11 or newer, and `git` on your `PATH`.
+Needs Python 3.14 or newer, and `git` on your `PATH`.
 
 ### From a checkout
 
@@ -159,8 +159,8 @@ $ pip install -e .
 ```
 
 If the version named in the error is one you no longer want (`python3.11` when you are on
-`python3.13`), then `python3 -m venv .venv` builds the same broken environment again. Check what
-`python3` resolves to with `python3 --version`, or pin the version: `uv venv --python 3.13`.
+`python3.14`), then `python3 -m venv .venv` builds the same broken environment again. Check what
+`python3` resolves to with `python3 --version`, or pin the version: `uv venv --python 3.14`.
 
 ## Three questions, three commands
 
@@ -402,8 +402,8 @@ is the `dev` extra as well.
 interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.
 
 CI runs the same targets on every push and pull request: formatting and linting, pyright, the test
-suite on Python 3.11 through 3.14, coverage, a wheel build with a CLI smoke test, and a `pip-audit`
-scan. Releases are cut by release-please from Conventional Commits.
+suite on Python 3.14, coverage, a wheel build with a CLI smoke test, and a `pip-audit` scan.
+Releases are cut by release-please from Conventional Commits.
 
 The test suite builds real git repositories and runs real `git` commands, no mocked git, because
 the behaviour worth protecting here is git's own.
