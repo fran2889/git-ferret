@@ -67,10 +67,12 @@ On Windows the activation is `.venv\Scripts\activate`.
 `-e` installs in editable mode, so the command runs the code in your checkout and edits take effect
 without reinstalling. Drop it for a plain install, which copies the code into the environment.
 
-To get the test suite as well:
+To get the test suite and the tools behind `make check` as well, ask for the extras
+individually or let the Makefile install all of them at once:
 
 ```console
-$ pip install -e ".[dev]"
+$ pip install -e ".[test,type,lint]"   # just the checks
+$ make install                          # every extra, the same set the pipeline uses
 ```
 
 If `python3 -m venv` fails with `ensurepip is not available`, your Python is missing the venv module,
@@ -396,7 +398,7 @@ $ make check
 
 `make audit` runs `pip-audit` twice, because a project path alone only covers the runtime
 dependencies: once over `pyproject.toml`, and once over the installed environment, which in CI
-is the `dev` extra as well.
+is the `audit` extra's toolchain as well.
 
 `make help` lists everything. Every target runs `python -m ...`, so `PYTHON` selects the
 interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.
