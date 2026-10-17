@@ -15,7 +15,6 @@ import pytest
 import typer
 
 from git_ferret import cli
-from git_ferret.cli import UsageError
 from git_ferret.config import Config
 from tests.helpers import make_repo
 
@@ -93,12 +92,6 @@ def test_an_interrupt_in_a_remote_run_is_reported_too(
     monkeypatch.setattr(cli, "discover_repos", interrupted)
     assert _main(["remote", str(tmp_path)]) == 1
     assert "aborted" in capsys.readouterr().err
-
-
-def test_the_run_itself_raises_usage_error() -> None:
-    # The entry point is what turns this into an exit code, so it is asserted
-    # where the conversion happens.
-    assert issubclass(UsageError, Exception)
 
 
 def test_an_explicit_exit_code_from_a_command_is_honoured(
