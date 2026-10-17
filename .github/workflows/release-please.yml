@@ -4,43 +4,104 @@ on:
     push:
         branches:
             - main
+    # Manual re-run. Publishing is driven by what is on GitHub rather than by
+    # what this run created, so a re-run is how a release whose build failed is
+    # finished, without hand-uploading anything.
+    workflow_dispatch:
 
 permissions:
     contents: write
     pull-requests: write
 
+# Never cancel a release run halfway: a cancelled run can leave a tag with no
+# artifacts, which is the state this workflow is built to avoid.
+concurrency:
+    group: release-${{ github.ref }}
+    cancel-in-progress: false
+
 jobs:
     release-please:
+        # release-please reads the branch it is dispatched from, so a manual run
+        # from anywhere but main is a no-op rather than a release from a
+        # side branch.
+        if: github.ref == 'refs/heads/main'
         runs-on: ubuntu-latest
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
-              with:
-                  python-version: '3.13'
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
             - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
               id: release
               with:
                   config-file: release-please-config.json
                   manifest-file: .release-please-manifest.json
-            - name: Install build tools
-              if: ${{ steps.release.outputs.release_created }}
-              run: python -m pip install build twine
-            - name: Build artifacts
-              if: ${{ steps.release.outputs.release_created }}
-              run: python -m build
-            - name: Check artifacts
-              if: ${{ steps.release.outputs.release_created }}
-              run: python -m twine check dist/*
-            - name: Upload to release
-              if: ${{ steps.release.outputs.release_created }}
-              run: gh release upload "${{ steps.release.outputs.tag_name }}" dist/*
+
+            # release-please leaves a *draft* release behind, with the tag on it
+            # and no assets. This step finds it by the version now on main,
+            # which is what release-please-versioned, and publishes it.
+            #
+            # The gate is deliberately not `steps.release.outputs.release_created`
+            # as it stands: that output is true only for the run that created the
+            # release, so a build that failed afterwards could never be retried
+            # from here -- re-running would leave the draft exactly as it was.
+            # Deriving the tag from the manifest makes the step idempotent, and
+            # publishing the same tag twice is prevented by the draft check.
+            #
+            # Assumes release-please's default include-v-in-tag, which pairs with
+            # include-component-in-tag: false in release-please-config.json. If
+            # that tag format ever changes, this is the line to change with it.
+            - name: Find the draft release to publish
+              id: publish
               env:
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-            - name: Publish release
-              if: ${{ steps.release.outputs.release_created }}
-              run: gh release edit "${{ steps.release.outputs.tag_name }}" --draft=false
+              run: |
+                  version=$(python3 - <<'PY'
+                  import json
+                  with open(".release-please-manifest.json") as handle:
+                      print(json.load(handle)["."])
+                  PY
+                  )
+                  tag="v$version"
+                  if gh release view "$tag" --json isDraft --jq '.isDraft' | grep -qx true; then
+                      echo "Releasing $tag"
+                      echo "tag=$tag" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "No draft release for $tag; nothing to publish."
+                  fi
+
+            # Built from the tag rather than from whatever main has become by
+            # now: the tag is what the release promises, and the two can differ
+            # if another commit landed while this run was starting.
+            - name: Check out the tag being released
+              if: steps.publish.outputs.tag != ''
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  ref: ${{ steps.publish.outputs.tag }}
+
+            - uses: ./.github/actions/setup
+              if: steps.publish.outputs.tag != ''
+              with:
+                  extras: build
+
+            - name: Build artifacts
+              if: steps.publish.outputs.tag != ''
+              run: python -m build
+
+            - name: Check artifacts
+              if: steps.publish.outputs.tag != ''
+              run: python -m twine check dist/*
+
+            # --clobber so a half-finished upload from a failed run is replaced
+            # rather than colliding with itself.
+            - name: Upload to release
+              if: steps.publish.outputs.tag != ''
+              run: gh release upload "$TAG" dist/* --clobber
               env:
+                  TAG: ${{ steps.publish.outputs.tag }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Publish release
+              if: steps.publish.outputs.tag != ''
+              run: gh release edit "$TAG" --draft=false
+              env:
+                  TAG: ${{ steps.publish.outputs.tag }}
                   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
