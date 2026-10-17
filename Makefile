@@ -38,8 +38,15 @@ build: ## Build the sdist and wheel
 	$(PYTHON) -m build
 	$(PYTHON) -m twine check dist/*
 
+# Two passes, because neither alone is enough. Given a project path, pip-audit
+# resolves `[project.dependencies]` only, so every tool in the dev extra is
+# invisible to it. `--local` audits what is actually installed, which in CI is
+# `.[dev]`. `--strict` is on the project pass alone: a dependency that will not
+# resolve there means the project metadata is broken and that should fail, while
+# `--local` legitimately skips anything already installed from elsewhere.
 audit: ## Audit dependencies for known vulnerabilities
-	$(PYTHON) -m pip_audit . --skip-editable --progress-spinner off
+	$(PYTHON) -m pip_audit . --skip-editable --strict --progress-spinner off
+	$(PYTHON) -m pip_audit --local --skip-editable --progress-spinner off
 
 clean: ## Remove build artifacts and caches
 	rm -rf build dist .pytest_cache .ruff_cache htmlcov .coverage coverage.xml

@@ -394,6 +394,10 @@ $ make check
 `make ci` runs everything the pipeline runs: the checks above plus `coverage`, `build`, and
 `audit`. It reaches the network, so it is slower than `make check`.
 
+`make audit` runs `pip-audit` twice, because a project path alone only covers the runtime
+dependencies: once over `pyproject.toml`, and once over the installed environment, which in CI
+is the `dev` extra as well.
+
 `make help` lists everything. Every target runs `python -m ...`, so `PYTHON` selects the
 interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.
 
