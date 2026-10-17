@@ -388,7 +388,11 @@ $ make check
 | `make test` | Run the test suite |
 | `make coverage` | Run the suite and write HTML and XML coverage reports |
 | `make build` | Build the sdist and wheel in `dist/` |
+| `make audit` | Scan dependencies for known vulnerabilities with `pip-audit` |
 | `make clean` | Remove build artifacts and caches |
+
+`make ci` runs everything the pipeline runs: the checks above plus `coverage`, `build`, and
+`audit`. It reaches the network, so it is slower than `make check`.
 
 `make help` lists everything. Every target runs `python -m ...`, so `PYTHON` selects the
 interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.

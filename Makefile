@@ -2,7 +2,7 @@
 PYTHON ?= python3
 SOURCES := git_ferret tests
 
-.PHONY: help install format format-check lint lint-fix typecheck test coverage build clean check ci
+.PHONY: help install format format-check lint lint-fix typecheck test coverage build audit clean check ci
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -38,9 +38,12 @@ build: ## Build the sdist and wheel
 	$(PYTHON) -m build
 	$(PYTHON) -m twine check dist/*
 
+audit: ## Audit dependencies for known vulnerabilities
+	$(PYTHON) -m pip_audit . --skip-editable --progress-spinner off
+
 clean: ## Remove build artifacts and caches
 	rm -rf build dist .pytest_cache .ruff_cache htmlcov .coverage coverage.xml
 
 check: format-check lint typecheck test ## Run the fast local checks
 
-ci: format-check lint typecheck coverage build ## Run everything the CI pipeline checks
+ci: format-check lint typecheck coverage build audit ## Run everything the CI pipeline checks
