@@ -170,16 +170,27 @@ def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path: Path):
 def test_unknown_command_exits_one():
     result = _cli("bogus-command")
     assert result.returncode == 1, result.stderr
+    assert "bogus-command" in result.stderr
 
 
 def test_unknown_flag_exits_one():
     result = _cli("local", "--bogus-flag")
     assert result.returncode == 1, result.stderr
+    assert "bogus-flag" in result.stderr
+
+
+def test_a_usage_error_is_one_line_and_not_a_traceback():
+    # A typo is the user's mistake, not a crash. An unhandled exception would
+    # also exit 1, which is why the exit code alone never caught this.
+    result = _cli("local", "--bogus-flag")
+    assert "Traceback" not in result.stderr
+    assert len(result.stderr.strip().splitlines()) == 1
 
 
 def test_missing_path_exits_one(tmp_path: Path):
     result = _cli("local", str(tmp_path / "nope"), "--no-fetch")
     assert result.returncode == 1, result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_help_exits_zero():

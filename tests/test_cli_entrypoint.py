@@ -48,6 +48,52 @@ def test_a_path_that_is_a_file_is_a_usage_error(tmp_path: Path):
     assert _main(["local", str(target)]) == 1
 
 
+def test_an_unknown_flag_is_one_line_and_not_a_traceback(
+    capsys: pytest.CaptureFixture[str],
+):
+    # A typo is the user's mistake, not a crash. The exit code was always 1 --
+    # an unhandled exception exits 1 too -- so only the output can tell them
+    # apart, which is why this asserts the stderr rather than the code.
+    assert _main(["local", "--nonsense"]) == 1
+    err = capsys.readouterr().err
+    assert "No such option" in err
+    assert "Traceback" not in err
+    assert len(err.strip().splitlines()) == 1
+
+
+def test_an_unknown_command_is_one_line_and_not_a_traceback(
+    capsys: pytest.CaptureFixture[str],
+):
+    assert _main(["sideways"]) == 1
+    err = capsys.readouterr().err
+    assert "sideways" in err
+    assert "Traceback" not in err
+
+
+def test_an_interrupt_is_reported_and_exits_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # Silently exiting 0 would make an interrupted scan indistinguishable from a
+    # clean one, which is the one thing a report you script against must not be.
+    def interrupted(root: Path) -> list[Path]:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "discover_repos", interrupted)
+    assert _main(["local", str(tmp_path)]) == 1
+    assert "aborted" in capsys.readouterr().err
+
+
+def test_an_interrupt_in_a_remote_run_is_reported_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    def interrupted(root: Path) -> list[Path]:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "discover_repos", interrupted)
+    assert _main(["remote", str(tmp_path)]) == 1
+    assert "aborted" in capsys.readouterr().err
+
+
 def test_the_run_itself_raises_usage_error() -> None:
     # The entry point is what turns this into an exit code, so it is asserted
     # where the conversion happens.
