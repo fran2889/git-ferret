@@ -6,13 +6,29 @@ on:
 
 permissions:
     pull-requests: write
-    contents: write
+
+# pull_request_target runs against the base branch with write permissions, so
+# this workflow must never check out or run anything from the pull request. It
+# does not: the only inputs are GitHub's own metadata.
+#
+# Two repository settings have to be on for this to work, and neither is
+# visible from the code:
+#   * "Allow GitHub Actions to create and approve pull requests", or the
+#     `gh pr review --approve` below is rejected.
+#   * "Allow auto-merge", or `gh pr merge --auto` is rejected.
 
 jobs:
     auto-merge:
         runs-on: ubuntu-latest
         if: github.actor == 'dependabot[bot]'
         steps:
+            # The documented guard for pull_request_target: fail loudly rather
+            # than approve anything whose head is a fork. Dependabot always
+            # opens from this repository, so this never fires in normal use.
+            - name: Refuse a pull request from another repository
+              if: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
+              run: exit 1
+
             - uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
               id: meta
               with:
