@@ -217,3 +217,28 @@ def test_merged_respects_branch_filter(tmp_path: Path):
     clone = _merged_repo(tmp_path)
     rep = analyse_merged_candidates(clone, Config(), resolve_base_ref(clone), [], "nomatch")
     assert "origin/done" not in _names(rep)
+
+
+def _clone_with_both_trunks(tmp_path: Path) -> Path:
+    """src carrying main, master and feature; the clone sees all three."""
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "master")
+    run(src, "checkout", "-b", "feature")
+    (src / "f.txt").write_text("a\nFEATURE\n")
+    commit(src, "feature work")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "fetch", "--all", "--prune")
+    return clone
+
+
+def test_the_base_remotes_own_trunk_is_never_a_candidate(tmp_path: Path):
+    # Whichever of the two names the trunk uses, it is not a branch to recommend
+    # deleting. A second remote's main is a different branch and stays eligible.
+    clone = _clone_with_both_trunks(tmp_path)
+    rep = analyse_remote(clone, Config(), "origin/master", [], None)
+    names = _names(rep)
+    assert "origin/master" not in names
+    assert "origin/main" not in names
+    assert "origin/feature" in names

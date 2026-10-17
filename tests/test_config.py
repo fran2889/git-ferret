@@ -61,6 +61,23 @@ def test_identity_falls_back_to_git_config(tmp_path: Path):
     assert resolve_identities([], Config(author=[]), repo) == ["Dev <dev@example.com>"]
 
 
+def test_identity_falls_back_to_the_email_when_there_is_no_name(tmp_path: Path):
+    # Plenty of checkouts have an email and no name; refusing to resolve would
+    # report every branch as somebody else's.
+    repo = _repo(tmp_path)
+    run(repo, "config", "--unset", "user.name")
+    assert resolve_identities([], Config(author=[]), repo) == ["dev@example.com"]
+
+
+def test_identity_is_empty_when_git_config_has_neither(tmp_path: Path):
+    # An empty identity must never reach git's --author: an empty pattern
+    # matches every commit.
+    repo = _repo(tmp_path)
+    run(repo, "config", "--unset", "user.name")
+    run(repo, "config", "--unset", "user.email")
+    assert resolve_identities([], Config(author=[]), repo) == []
+
+
 def test_identity_is_resolved_per_repository(tmp_path: Path):
     repo_a = _repo(tmp_path / "a")
     repo_b = _repo(tmp_path / "b")

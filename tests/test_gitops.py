@@ -10,7 +10,13 @@ from git_ferret.gitops import (
     resolve_base_ref,
     tree_hash,
 )
-from tests.helpers import clone_local, commit, make_repo, run
+from tests.helpers import (
+    add_branch_with_missing_commit,
+    clone_local,
+    commit,
+    make_repo,
+    run,
+)
 
 
 def test_resolve_base_ref_falls_back_to_local(tmp_path: Path):
@@ -187,3 +193,27 @@ def test_stash_entries_empty_for_clean_repo(tmp_path: Path):
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
     assert stash_entries(repo) == []
+
+
+def test_tree_hash_is_none_for_a_ref_that_does_not_exist(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    assert tree_hash(repo, "refs/heads/nope") is None
+
+
+def test_tree_hash_is_none_for_an_empty_ref(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    assert tree_hash(repo, "HEAD") is None
+
+
+def test_a_branch_whose_commit_is_gone_still_lists_without_an_age(tmp_path: Path):
+    # Git lists the branch; `git log` on it does not work. The branch is still
+    # worth reporting, just without a "last commit" age to claim.
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    add_branch_with_missing_commit(repo, "ghost")
+    branches = {b.name: b for b in list_branches(repo)}
+    assert "ghost" in branches
+    assert branches["ghost"].last_commit_rel == ""

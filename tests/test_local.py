@@ -6,7 +6,7 @@ from git_ferret.analysis.local import analyse_local
 from git_ferret.config import Config
 from git_ferret.gitops import resolve_base_ref
 from git_ferret.models import RepoReport, Status
-from tests.helpers import commit, make_repo, run
+from tests.helpers import add_branch_with_missing_commit, commit, make_repo, run
 
 
 def _report(repo: Path, config: Config | None = None) -> RepoReport:
@@ -221,3 +221,16 @@ def test_analysis_stamps_the_age_of_the_refs(tmp_path: Path):
     rep = _report(clone)
     assert rep.fetched_at is not None
     assert rep.fetch_failed is False
+
+
+def test_a_branch_with_no_readable_commit_is_reported_without_an_age(tmp_path: Path):
+    # The ref exists, so the branch is real and belongs in the report. Only the
+    # age is unavailable, and inventing one would be a lie about how stale it is.
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    add_branch_with_missing_commit(repo, "ghost")
+    rep = _report(repo)
+    ghost = next(f for f in rep.findings if f.branch == "ghost")
+    assert ghost.status is Status.NOT_PUSHED
+    assert "last commit" not in ghost.detail

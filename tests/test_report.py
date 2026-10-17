@@ -310,3 +310,11 @@ def test_screen_keeps_the_document_title_apart_from_the_stale_warning():
     lines = _on_screen(render_header(stale_count=1, total=3))
     assert lines[0].strip() == "git-ferret"
     assert lines[1] == ""
+
+
+def test_a_failed_fetch_with_a_timestamp_names_the_state_it_read():
+    # The two facts a reader needs: the refresh failed, and the report below is
+    # from this timestamp rather than from now.
+    rep = _repo(fetched_at=datetime(2026, 10, 16, 9, 41, 2), fetch_failed=True)
+    out = render_report([rep], stale_count=1)
+    assert "fetch failed; analysed from state as of 2026-10-16 09:41:02" in out

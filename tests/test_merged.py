@@ -6,6 +6,9 @@ branch is recommended for deletion.
 
 from pathlib import Path
 
+import pytest
+
+from git_ferret.analysis import merged as merged_module
 from git_ferret.analysis.merged import (
     MergeVerdict,
     commits_in_range,
@@ -149,3 +152,28 @@ def test_merged_then_reverted_branch_reports_merged(tmp_path: Path):
     clone = clone_local(src, tmp_path / "clone")
     run(clone, "fetch", "--all", "--prune")
     assert merge_verdict(clone, "origin/main", "origin/feat") is MergeVerdict.MERGED
+
+
+def test_an_unreadable_base_tree_is_not_claimed_as_merged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Claiming MERGED when the base tree could not be read is the one answer
+    # that recommends deleting work somebody still has. UNKNOWN withholds it.
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\nb\nc\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "feature")
+    (src / "f.txt").write_text("a\nFEATURE\nc\n")
+    commit(src, "feature work")
+    run(src, "checkout", "main")
+    run(src, "merge", "--squash", "feature")
+    commit(src, "squash merge")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "fetch", "--all", "--prune")
+    assert merge_verdict(clone, "origin/main", "origin/feature") is MergeVerdict.MERGED
+
+    def unreadable_tree(repo: Path, ref: str) -> None:
+        return None
+
+    monkeypatch.setattr(merged_module, "tree_hash", unreadable_tree)
+    assert merge_verdict(clone, "origin/main", "origin/feature") is MergeVerdict.UNKNOWN

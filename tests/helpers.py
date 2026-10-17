@@ -47,6 +47,21 @@ def run(repo: Path, *args: str) -> CompletedProcess:
     return run_git(repo, *args, check=True)
 
 
+def add_branch_with_missing_commit(repo: Path, name: str) -> str:
+    """Point branch *name* at an object this repository does not have.
+
+    A ref whose target is gone is what a half-finished fetch, a pruned object
+    store or a hand-edited ref file leaves behind. Git still lists the branch,
+    and every command that needs the commit behind it fails, which is the state
+    the read-only paths have to keep reporting through.
+    """
+    sha = "1" * 40
+    ref = repo / ".git" / "refs" / "heads" / name
+    ref.parent.mkdir(parents=True, exist_ok=True)
+    ref.write_text(f"{sha}\n")
+    return sha
+
+
 def clone_local(src: Path, dest: Path, depth: int | None = None) -> Path:
     """Clone *src* into *dest* over ``file://``, so the remote is really fetchable.
 

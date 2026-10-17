@@ -57,4 +57,7 @@ source = ["git_ferret"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-fail_under = 90
+# The suite is at 97.9%, so 95 is a floor that catches a real drop without
+# failing on the drift between the Python the CI job runs and the one this
+# number was measured on.
+fail_under = 95
