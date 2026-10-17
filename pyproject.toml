@@ -1,5 +1,7 @@
 [build-system]
-requires = ["setuptools>=68"]
+# 77 is the floor for PEP 639: `license` as an SPDX expression and
+# `license-files` are silently ignored by anything older.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
