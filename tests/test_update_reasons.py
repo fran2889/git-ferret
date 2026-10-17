@@ -8,15 +8,17 @@ repository's own section, where they are findings among the rest, so that is
 where they are asserted.
 """
 
+from pathlib import Path
+
 from git_ferret.analysis.local import analyse_local
 from git_ferret.cli import fast_forward_worktrees
 from git_ferret.config import Config
 from git_ferret.gitops import resolve_base_ref
-from git_ferret.models import Status
+from git_ferret.models import Finding, Status
 from tests.helpers import clone_local, commit, make_repo, run
 
 
-def _behind_clone(tmp_path):
+def _behind_clone(tmp_path: Path) -> Path:
     """A clone whose checked-out branch is behind its upstream by one commit."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
@@ -29,16 +31,12 @@ def _behind_clone(tmp_path):
     return clone
 
 
-def _finding(repo, status):
+def _finding(repo: Path, status: Status) -> Finding:
     rep = analyse_local(repo, Config(), resolve_base_ref(repo))
     return next(f for f in rep.findings if f.status is status)
 
 
-def _head(clone):
-    return run(clone, "rev-parse", "HEAD").stdout.strip()
-
-
-def test_dirty_worktree_is_reported_as_dirty_above(tmp_path):
+def test_dirty_worktree_is_reported_as_dirty_above(tmp_path: Path):
     clone = _behind_clone(tmp_path)
     (clone / "wip.txt").write_text("x\n")
 
@@ -49,7 +47,7 @@ def test_dirty_worktree_is_reported_as_dirty_above(tmp_path):
     assert "DIRTY" in finding.status.MARKER
 
 
-def test_diverged_branch_is_reported_as_diverged(tmp_path):
+def test_diverged_branch_is_reported_as_diverged(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -71,7 +69,7 @@ def test_diverged_branch_is_reported_as_diverged(tmp_path):
     assert "cannot fast-forward" in finding.detail
 
 
-def test_worktree_with_no_upstream_is_reported_as_not_pushed(tmp_path):
+def test_worktree_with_no_upstream_is_reported_as_not_pushed(tmp_path: Path):
     clone = _behind_clone(tmp_path)
     run(clone, "branch", "--unset-upstream")
 
@@ -80,7 +78,7 @@ def test_worktree_with_no_upstream_is_reported_as_not_pushed(tmp_path):
     assert "no upstream configured" in finding.detail
 
 
-def test_up_to_date_branch_is_not_reported_as_updated(tmp_path):
+def test_up_to_date_branch_is_not_reported_as_updated(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -90,7 +88,7 @@ def test_up_to_date_branch_is_not_reported_as_updated(tmp_path):
     assert fast_forward_worktrees(clone) == []
 
 
-def test_a_fast_forward_names_only_the_branch_that_moved(tmp_path):
+def test_a_fast_forward_names_only_the_branch_that_moved(tmp_path: Path):
     clone = _behind_clone(tmp_path)
 
     assert fast_forward_worktrees(clone) == ["feat"]

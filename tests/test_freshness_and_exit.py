@@ -16,13 +16,15 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 from git_ferret.gitops import fetch_head_mtime, refs_updated_at
 from tests.helpers import clone_local, commit, make_repo, run
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def _cli(*args):
+def _cli(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "git_ferret.cli", *args],
         check=False,
@@ -35,7 +37,7 @@ def _cli(*args):
 # --- fetch age ----------------------------------------------------------------
 
 
-def test_fresh_clone_has_a_known_refs_timestamp(tmp_path):
+def test_fresh_clone_has_a_known_refs_timestamp(tmp_path: Path):
     # `git clone` writes no FETCH_HEAD, so the clone must fall back to the
     # remote-tracking refs rather than reporting "never fetched".
     src = make_repo(tmp_path / "src")
@@ -46,7 +48,7 @@ def test_fresh_clone_has_a_known_refs_timestamp(tmp_path):
     assert refs_updated_at(clone) is not None
 
 
-def test_refs_timestamp_is_recent_for_a_fresh_clone(tmp_path):
+def test_refs_timestamp_is_recent_for_a_fresh_clone(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -56,12 +58,12 @@ def test_refs_timestamp_is_recent_for_a_fresh_clone(tmp_path):
     assert (time.time() - stamp.timestamp()) < 300
 
 
-def test_refs_updated_at_none_for_a_repo_with_no_refs(tmp_path):
+def test_refs_updated_at_none_for_a_repo_with_no_refs(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     assert refs_updated_at(repo) is None
 
 
-def test_fetched_repo_uses_fetch_head(tmp_path):
+def test_fetched_repo_uses_fetch_head(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -71,7 +73,9 @@ def test_fetched_repo_uses_fetch_head(tmp_path):
     assert refs_updated_at(clone) is not None
 
 
-def test_fresh_clone_reports_when_its_refs_were_written(tmp_path, capsys):
+def test_fresh_clone_reports_when_its_refs_were_written(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     from git_ferret.cli import run_command
 
     src = make_repo(tmp_path / "src")
@@ -89,7 +93,7 @@ def test_fresh_clone_reports_when_its_refs_were_written(tmp_path, capsys):
     assert "stale" in out.lower()
 
 
-def test_genuinely_stale_state_is_still_flagged(tmp_path, capsys):
+def test_genuinely_stale_state_is_still_flagged(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     from git_ferret.cli import run_command
 
     src = make_repo(tmp_path / "src")
@@ -108,7 +112,7 @@ def test_genuinely_stale_state_is_still_flagged(tmp_path, capsys):
     assert "stale" in capsys.readouterr().out.lower()
 
 
-def test_fetch_failure_is_reported_unreachable_and_stale(tmp_path):
+def test_fetch_failure_is_reported_unreachable_and_stale(tmp_path: Path):
     # A failing fetch is the one way a run reads state it could not refresh, so
     # it must surface as [UNREACHABLE] and must mark the run stale. The direct
     # analyse_* tests below this file call the analysis without the CLI's fetch
@@ -126,7 +130,7 @@ def test_fetch_failure_is_reported_unreachable_and_stale(tmp_path):
     assert "stale" in result.stdout.lower()
 
 
-def test_stale_warning_names_the_true_count(tmp_path):
+def test_stale_warning_names_the_true_count(tmp_path: Path):
     # The warning names how many of how many. It read "1 of 1" for any run
     # because it was rendered from the first repository alone.
     for name in ("a", "b"):
@@ -139,7 +143,7 @@ def test_stale_warning_names_the_true_count(tmp_path):
     assert "2 of 2 repositories" in result.stdout
 
 
-def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path):
+def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path: Path):
     # One stale repo among many is the case worth nagging about, and it is not
     # necessarily the first one. Here the first repository's fetch succeeds and
     # the second's fails.
@@ -173,7 +177,7 @@ def test_unknown_flag_exits_one():
     assert result.returncode == 1, result.stderr
 
 
-def test_missing_path_exits_one(tmp_path):
+def test_missing_path_exits_one(tmp_path: Path):
     result = _cli("local", str(tmp_path / "nope"), "--no-fetch")
     assert result.returncode == 1, result.stderr
 
@@ -182,7 +186,7 @@ def test_help_exits_zero():
     assert _cli("--help").returncode == 0
 
 
-def test_findings_alone_exit_zero(tmp_path):
+def test_findings_alone_exit_zero(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -191,7 +195,7 @@ def test_findings_alone_exit_zero(tmp_path):
     assert result.returncode == 0, result.stderr
 
 
-def test_valid_run_exits_zero(tmp_path):
+def test_valid_run_exits_zero(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")

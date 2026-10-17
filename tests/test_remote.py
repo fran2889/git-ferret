@@ -1,5 +1,7 @@
 """Tests for remote branch filtering and safe-to-delete gating."""
 
+from pathlib import Path
+
 from git_ferret.analysis.remote import (
     analyse_merged_candidates,
     analyse_remote,
@@ -7,14 +9,14 @@ from git_ferret.analysis.remote import (
 )
 from git_ferret.config import Config
 from git_ferret.gitops import resolve_base_ref
-from git_ferret.models import Status
+from git_ferret.models import RepoReport, Status
 from tests.helpers import clone_local, commit, make_repo, run
 
 FRAN = "Fran <fran@z.com>"
 OTHER = "Other <o@x.com>"
 
 
-def _repo_with_branches(tmp_path, branches):
+def _repo_with_branches(tmp_path: Path, branches: list[tuple[str, str]]) -> Path:
     """*branches* is a list of (name, author) pairs pushed to origin."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
@@ -29,49 +31,49 @@ def _repo_with_branches(tmp_path, branches):
     return clone
 
 
-def _names(rep):
+def _names(rep: RepoReport) -> set[str]:
     return {f.branch for f in rep.findings}
 
 
-def test_remote_filters_by_branch_name(tmp_path):
+def test_remote_filters_by_branch_name(tmp_path: Path):
     clone = _repo_with_branches(tmp_path, [("ABC-123-add-thing", FRAN), ("ZZZ-other", OTHER)])
     rep = analyse_remote(clone, Config(), resolve_base_ref(clone), [], "ABC-123")
     assert "origin/ABC-123-add-thing" in _names(rep)
     assert "origin/ZZZ-other" not in _names(rep)
 
 
-def test_remote_filters_by_author(tmp_path):
+def test_remote_filters_by_author(tmp_path: Path):
     clone = _repo_with_branches(tmp_path, [("by-fran", FRAN), ("by-someone", OTHER)])
     rep = analyse_remote(clone, Config(), resolve_base_ref(clone), ["fran@z.com"], None)
     assert "origin/by-fran" in _names(rep)
     assert "origin/by-someone" not in _names(rep)
 
 
-def test_both_filters_combine_with_and(tmp_path):
+def test_both_filters_combine_with_and(tmp_path: Path):
     clone = _repo_with_branches(tmp_path, [("by-fran", FRAN), ("by-someone", OTHER)])
     rep = analyse_remote(clone, Config(), resolve_base_ref(clone), ["fran@z.com"], "by-fran")
     assert _names(rep) == {"origin/by-fran"}
 
 
-def test_remote_ignores_whitelisted_branches(tmp_path):
+def test_remote_ignores_whitelisted_branches(tmp_path: Path):
     clone = _repo_with_branches(tmp_path, [("release/9", FRAN)])
     rep = analyse_remote(clone, Config(whitelist=["release/*"]), resolve_base_ref(clone), [], None)
     assert "origin/release/9" not in _names(rep)
 
 
-def test_remote_never_lists_the_base_ref(tmp_path):
+def test_remote_never_lists_the_base_ref(tmp_path: Path):
     clone = _repo_with_branches(tmp_path, [("feature", FRAN)])
     rep = analyse_remote(clone, Config(), resolve_base_ref(clone), [], None)
     assert "origin/main" not in _names(rep)
 
 
-def test_empty_identities_lists_all_remote_branches(tmp_path):
+def test_empty_identities_lists_all_remote_branches(tmp_path: Path):
     clone = _repo_with_branches(tmp_path, [("someone-elses", OTHER)])
     rep = analyse_remote(clone, Config(), resolve_base_ref(clone), [], None)
     assert "origin/someone-elses" in _names(rep)
 
 
-def _merged_repo(tmp_path):
+def _merged_repo(tmp_path: Path):
     """src with `done` squash-merged into main; clone has origin/done merged."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\n")
@@ -87,7 +89,7 @@ def _merged_repo(tmp_path):
     return clone
 
 
-def test_merged_branch_marked_safe_when_no_local_unpushed(tmp_path):
+def test_merged_branch_marked_safe_when_no_local_unpushed(tmp_path: Path):
     clone = _merged_repo(tmp_path)
     assert local_branch_unpushed_map(clone).get("done", False) is False
     rep = analyse_merged_candidates(clone, Config(), resolve_base_ref(clone), [], None)
@@ -95,7 +97,7 @@ def test_merged_branch_marked_safe_when_no_local_unpushed(tmp_path):
     assert f.status is Status.SAFE_TO_DELETE
 
 
-def test_merged_branch_marked_unsafe_when_local_unpushed(tmp_path):
+def test_merged_branch_marked_unsafe_when_local_unpushed(tmp_path: Path):
     # The gate that matters most: the remote branch is merged, but the user's
     # local copy of it holds work that exists nowhere else.
     clone = _merged_repo(tmp_path)
@@ -110,12 +112,12 @@ def test_merged_branch_marked_unsafe_when_local_unpushed(tmp_path):
     assert "unpushed" in f.detail.lower()
 
 
-def test_unpushed_map_has_no_entry_for_an_absent_branch(tmp_path):
+def test_unpushed_map_has_no_entry_for_an_absent_branch(tmp_path: Path):
     clone = _merged_repo(tmp_path)
     assert "no-such-branch" not in local_branch_unpushed_map(clone)
 
 
-def test_local_branch_with_no_upstream_counts_as_unpushed(tmp_path):
+def test_local_branch_with_no_upstream_counts_as_unpushed(tmp_path: Path):
     # A branch that was never pushed has no upstream, so `ahead` cannot be
     # computed and reads as 0. It still holds work that exists nowhere else,
     # which is exactly what the deletion gate exists to protect.
@@ -124,7 +126,7 @@ def test_local_branch_with_no_upstream_counts_as_unpushed(tmp_path):
     assert local_branch_unpushed_map(clone)["done"] is True
 
 
-def test_merged_branch_unsafe_when_local_branch_has_no_upstream(tmp_path):
+def test_merged_branch_unsafe_when_local_branch_has_no_upstream(tmp_path: Path):
     # The remote branch is merged, but the local branch of the same name was
     # never pushed. Recommending deletion here would lose the local work.
     clone = _merged_repo(tmp_path)
@@ -139,7 +141,7 @@ def test_merged_branch_unsafe_when_local_branch_has_no_upstream(tmp_path):
     assert "unpushed" in f.detail.lower()
 
 
-def test_merged_unmerged_branch_is_not_safe(tmp_path):
+def test_merged_unmerged_branch_is_not_safe(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
     commit(src, "base")
@@ -154,7 +156,7 @@ def test_merged_unmerged_branch_is_not_safe(tmp_path):
     assert f.status is Status.NOT_MERGED
 
 
-def test_merged_conflicting_branch_is_not_safe(tmp_path):
+def test_merged_conflicting_branch_is_not_safe(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
     commit(src, "base")
@@ -171,7 +173,7 @@ def test_merged_conflicting_branch_is_not_safe(tmp_path):
     assert f.status is Status.CONFLICTS
 
 
-def test_merged_never_marks_unknown_as_safe(tmp_path):
+def test_merged_never_marks_unknown_as_safe(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -187,7 +189,7 @@ def test_merged_never_marks_unknown_as_safe(tmp_path):
     assert f.status is Status.UNKNOWN
 
 
-def test_safe_to_delete_against_a_local_base_ref_is_marked_weaker(tmp_path):
+def test_safe_to_delete_against_a_local_base_ref_is_marked_weaker(tmp_path: Path):
     # The one override: the claim is right, but it rests on a local main that may
     # lag the server, so the glyph says "verify" rather than "safe".
     src = make_repo(tmp_path / "src")
@@ -211,7 +213,7 @@ def test_safe_to_delete_against_a_local_base_ref_is_marked_weaker(tmp_path):
     assert "verify against the remote" in f.detail
 
 
-def test_merged_respects_branch_filter(tmp_path):
+def test_merged_respects_branch_filter(tmp_path: Path):
     clone = _merged_repo(tmp_path)
     rep = analyse_merged_candidates(clone, Config(), resolve_base_ref(clone), [], "nomatch")
     assert "origin/done" not in _names(rep)

@@ -5,17 +5,19 @@ refusals are asserted as carefully as its effect: each test below checks that
 HEAD did not move, not merely that nothing was printed.
 """
 
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from git_ferret.cli import build_parser, fast_forward_worktrees
 from tests.helpers import clone_local, commit, make_repo, run
 
 
-def _head(repo):
+def _head(repo: Path) -> str:
     return run(repo, "rev-parse", "HEAD").stdout.strip()
 
 
-def _behind_clone(tmp_path):
+def _behind_clone(tmp_path: Path) -> Path:
     """A clone whose checked-out branch is one commit behind its upstream."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
@@ -28,7 +30,7 @@ def _behind_clone(tmp_path):
     return clone
 
 
-def test_fast_forwards_a_clean_worktree_behind_upstream(tmp_path):
+def test_fast_forwards_a_clean_worktree_behind_upstream(tmp_path: Path):
     clone = _behind_clone(tmp_path)
     assert run(clone, "rev-list", "--count", "HEAD..@{upstream}").stdout.strip() == "1"
 
@@ -36,7 +38,7 @@ def test_fast_forwards_a_clean_worktree_behind_upstream(tmp_path):
     assert run(clone, "rev-list", "--count", "HEAD..@{upstream}").stdout.strip() == "0"
 
 
-def test_skips_dirty_worktree(tmp_path):
+def test_skips_dirty_worktree(tmp_path: Path):
     clone = _behind_clone(tmp_path)
     (clone / "uncommitted.txt").write_text("wip\n")
     before = _head(clone)
@@ -47,7 +49,7 @@ def test_skips_dirty_worktree(tmp_path):
     assert _head(clone) == before
 
 
-def test_skips_branch_with_no_upstream(tmp_path):
+def test_skips_branch_with_no_upstream(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -58,7 +60,7 @@ def test_skips_branch_with_no_upstream(tmp_path):
     assert _head(repo) == before
 
 
-def test_skips_detached_head(tmp_path):
+def test_skips_detached_head(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -69,7 +71,7 @@ def test_skips_detached_head(tmp_path):
     assert _head(repo) == sha
 
 
-def test_up_to_date_worktree_is_not_reported(tmp_path):
+def test_up_to_date_worktree_is_not_reported(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -78,7 +80,7 @@ def test_up_to_date_worktree_is_not_reported(tmp_path):
     assert fast_forward_worktrees(clone) == []
 
 
-def test_does_not_delete_anything(tmp_path):
+def test_does_not_delete_anything(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -91,7 +93,7 @@ def test_does_not_delete_anything(tmp_path):
     assert before == after
 
 
-def _updatable_tree(tmp_path):
+def _updatable_tree(tmp_path: Path):
     """A root holding one clean worktree that --update will move.
 
     Returns the root to scan. `origin-src` has no remote, so it is reported but
@@ -109,7 +111,7 @@ def _updatable_tree(tmp_path):
     return root
 
 
-def test_rollup_names_repositories_relative_to_the_root(tmp_path):
+def test_rollup_names_repositories_relative_to_the_root(tmp_path: Path):
     root = _updatable_tree(tmp_path)
 
     res = CliRunner().invoke(build_parser(), ["local", str(root), "--update"])
@@ -121,7 +123,7 @@ def test_rollup_names_repositories_relative_to_the_root(tmp_path):
     assert str(root) not in res.output
 
 
-def test_rollup_is_a_block_of_its_own(tmp_path):
+def test_rollup_is_a_block_of_its_own(tmp_path: Path):
     res = CliRunner().invoke(build_parser(), ["local", str(_updatable_tree(tmp_path)), "--update"])
 
     lines = res.output.split("\n")
@@ -131,7 +133,7 @@ def test_rollup_is_a_block_of_its_own(tmp_path):
     assert lines[heading + 1] == ""
 
 
-def test_rollup_is_absent_when_nothing_was_updated(tmp_path):
+def test_rollup_is_absent_when_nothing_was_updated(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -142,14 +144,14 @@ def test_rollup_is_absent_when_nothing_was_updated(tmp_path):
     assert "fast-forwarded" not in res.output
 
 
-def test_rollup_lines_carry_no_status_marker(tmp_path):
+def test_rollup_lines_carry_no_status_marker(tmp_path: Path):
     res = CliRunner().invoke(build_parser(), ["local", str(_updatable_tree(tmp_path)), "--update"])
 
     rollup = res.output.split("## fast-forwarded")[1]
     assert "[OK]" not in rollup
 
 
-def test_skips_are_not_repeated_in_the_rollup(tmp_path):
+def test_skips_are_not_repeated_in_the_rollup(tmp_path: Path):
     root = _updatable_tree(tmp_path)
     (root / "app" / "wip.txt").write_text("x\n")
 

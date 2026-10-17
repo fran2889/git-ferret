@@ -4,12 +4,13 @@ import io
 import re
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from git_ferret.models import Finding, RepoReport, Status
 from git_ferret.report import emit, render_header, render_repo, render_report
 
 
-def _repo(**kwargs):
+def _repo(**kwargs: Any) -> RepoReport:
     return RepoReport(path=Path("/tmp/api"), base_ref="origin/main", **kwargs)
 
 

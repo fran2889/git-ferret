@@ -46,7 +46,7 @@ select = ["E", "F", "I", "UP", "B", "RUF", "PLW1510"]
 "git_ferret/cli.py" = ["B008"]
 
 [tool.pyright]
-include = ["git_ferret"]
+include = ["git_ferret", "tests", "scripts"]
 typeCheckingMode = "strict"
 pythonVersion = "3.11"
 reportMissingTypeStubs = false

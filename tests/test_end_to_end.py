@@ -1,5 +1,7 @@
 """End-to-end coverage: all three subcommands over a realistic repository tree."""
 
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from git_ferret.cli import build_parser
@@ -8,7 +10,7 @@ from tests.helpers import clone_local, commit, make_repo, run
 runner = CliRunner()
 
 
-def _tree(tmp_path):
+def _tree(tmp_path: Path):
     """A pushed+stale branch, a merged branch, a clean branch, and a remote-less repo."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
@@ -39,7 +41,7 @@ def _tree(tmp_path):
     return tmp_path
 
 
-def test_local_end_to_end_emits_valid_markdown(tmp_path):
+def test_local_end_to_end_emits_valid_markdown(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     assert res.exit_code == 0, res.output
@@ -47,27 +49,27 @@ def test_local_end_to_end_emits_valid_markdown(tmp_path):
     assert "\x1b[" not in res.stdout
 
 
-def test_all_three_subcommands_succeed(tmp_path):
+def test_all_three_subcommands_succeed(tmp_path: Path):
     root = _tree(tmp_path)
     for cmd in ("local", "remote", "merged"):
         res = runner.invoke(build_parser(), [cmd, str(root), "--no-fetch"])
         assert res.exit_code == 0, f"{cmd} failed: {res.output}"
 
 
-def test_reports_every_discovered_repo(tmp_path):
+def test_reports_every_discovered_repo(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     assert "project" in res.stdout
     assert "solo" in res.stdout
 
 
-def test_output_has_no_tables(tmp_path):
+def test_output_has_no_tables(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     assert "|" not in res.stdout
 
 
-def test_every_finding_carries_a_marker(tmp_path):
+def test_every_finding_carries_a_marker(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     for line in res.stdout.splitlines():
@@ -75,7 +77,7 @@ def test_every_finding_carries_a_marker(tmp_path):
             assert "[" in line and "]" in line, f"unmarked finding: {line}"
 
 
-def test_findings_are_not_dashed_off_from_their_marker(tmp_path):
+def test_findings_are_not_dashed_off_from_their_marker(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     for line in res.stdout.splitlines():
@@ -85,14 +87,14 @@ def test_findings_are_not_dashed_off_from_their_marker(tmp_path):
             assert "— " not in line, f"dashes still in the output: {line}"
 
 
-def test_merged_reports_the_merged_branch(tmp_path):
+def test_merged_reports_the_merged_branch(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["merged", str(root), "--no-fetch"])
     assert "origin/already-done" in res.stdout
     assert "safe to delete" in res.stdout
 
 
-def test_merged_marks_the_deletion_candidate_in_the_marker(tmp_path):
+def test_merged_marks_the_deletion_candidate_in_the_marker(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["merged", str(root), "--no-fetch"])
     # The point of the command: which branch can go, readable from the marker
@@ -101,26 +103,26 @@ def test_merged_marks_the_deletion_candidate_in_the_marker(tmp_path):
     assert "[OK]" not in res.stdout
 
 
-def test_merged_does_not_recommend_the_stale_branch(tmp_path):
+def test_merged_does_not_recommend_the_stale_branch(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["merged", str(root), "--no-fetch"])
     assert "origin/stale-work" not in res.stdout.split("safe to delete")[0]
 
 
-def test_stale_warning_present_when_no_fetch(tmp_path):
+def test_stale_warning_present_when_no_fetch(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     assert "stale" in res.stdout.lower()
 
 
-def test_nested_repo_is_not_reported_twice(tmp_path):
+def test_nested_repo_is_not_reported_twice(tmp_path: Path):
     outer = make_repo(tmp_path / "outer")
     make_repo(outer / "vendor" / "inner")
     res = runner.invoke(build_parser(), ["local", str(tmp_path), "--no-fetch"])
     assert res.stdout.count("## ") == 1
 
 
-def test_repo_without_base_branch_states_the_reason(tmp_path):
+def test_repo_without_base_branch_states_the_reason(tmp_path: Path):
     repo = make_repo(tmp_path / "trunky")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -132,7 +134,7 @@ def test_repo_without_base_branch_states_the_reason(tmp_path):
     assert "skipped" not in res.stdout
 
 
-def test_local_does_not_write_without_update(tmp_path):
+def test_local_does_not_write_without_update(tmp_path: Path):
     root = _tree(tmp_path)
     before = run(root / "project", "status", "--porcelain").stdout
     runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
@@ -140,7 +142,7 @@ def test_local_does_not_write_without_update(tmp_path):
     assert before == after
 
 
-def test_headings_are_relative_to_the_given_root(tmp_path):
+def test_headings_are_relative_to_the_given_root(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     headings = [ln for ln in res.stdout.splitlines() if ln.startswith("## ")]
@@ -148,13 +150,13 @@ def test_headings_are_relative_to_the_given_root(tmp_path):
     assert str(root) not in res.stdout
 
 
-def test_scanning_a_single_repo_names_it_as_dot(tmp_path):
+def test_scanning_a_single_repo_names_it_as_dot(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root / "solo"), "--no-fetch"])
     assert "## .\n" in res.stdout
 
 
-def test_every_heading_is_preceded_by_a_blank_line(tmp_path):
+def test_every_heading_is_preceded_by_a_blank_line(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     # The terminal pads headings on the way out; the file must not depend on it.
@@ -163,7 +165,7 @@ def test_every_heading_is_preceded_by_a_blank_line(tmp_path):
             assert before == "", f"no blank line above: {heading!r}"
 
 
-def test_every_heading_is_followed_by_its_fetch_line(tmp_path):
+def test_every_heading_is_followed_by_its_fetch_line(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
     lines = res.stdout.split("\n")

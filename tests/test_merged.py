@@ -4,6 +4,8 @@ These are the load-bearing tests of the whole tool: they decide whether a
 branch is recommended for deletion.
 """
 
+from pathlib import Path
+
 from git_ferret.analysis.merged import (
     MergeVerdict,
     commits_in_range,
@@ -13,7 +15,7 @@ from git_ferret.analysis.merged import (
 from tests.helpers import clone_local, commit, make_repo, run
 
 
-def _clone_with_feature(tmp_path):
+def _clone_with_feature(tmp_path: Path):
     """src: main + feature. clone: both visible as remote branches."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
@@ -27,7 +29,7 @@ def _clone_with_feature(tmp_path):
     return src, clone
 
 
-def test_squash_merged_branch_is_merged(tmp_path):
+def test_squash_merged_branch_is_merged(tmp_path: Path):
     # Ancestry lies here: the branch is fully merged but not an ancestor.
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
@@ -47,12 +49,12 @@ def test_squash_merged_branch_is_merged(tmp_path):
     assert merge_verdict(clone, "origin/main", "origin/feature") is MergeVerdict.MERGED
 
 
-def test_unmerged_branch_is_not_merged(tmp_path):
+def test_unmerged_branch_is_not_merged(tmp_path: Path):
     _src, clone = _clone_with_feature(tmp_path)
     assert merge_verdict(clone, "origin/main", "origin/feature") is MergeVerdict.NOT_MERGED
 
 
-def test_conflicting_branch_reports_conflicts(tmp_path):
+def test_conflicting_branch_reports_conflicts(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\nc\n")
     commit(src, "base")
@@ -67,7 +69,7 @@ def test_conflicting_branch_reports_conflicts(tmp_path):
     assert merge_verdict(clone, "origin/main", "origin/conflict") is MergeVerdict.CONFLICTS
 
 
-def test_unrelated_histories_report_unknown_not_conflicts(tmp_path):
+def test_unrelated_histories_report_unknown_not_conflicts(tmp_path: Path):
     # exit 128 means "no merge base", which is unknown, not a conflict.
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
@@ -82,7 +84,7 @@ def test_unrelated_histories_report_unknown_not_conflicts(tmp_path):
     assert merge_verdict(clone, "origin/main", "origin/orphan") is MergeVerdict.UNKNOWN
 
 
-def test_shallow_repo_is_unknown_not_merged(tmp_path):
+def test_shallow_repo_is_unknown_not_merged(tmp_path: Path):
     # No merge base locally must never read as merged.
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\n")
@@ -95,14 +97,14 @@ def test_shallow_repo_is_unknown_not_merged(tmp_path):
     assert merge_verdict(clone, "origin/main", "origin/feature") is not MergeVerdict.MERGED
 
 
-def test_remote_branches_lists_origin_refs(tmp_path):
+def test_remote_branches_lists_origin_refs(tmp_path: Path):
     _src, clone = _clone_with_feature(tmp_path)
     refs = remote_branches(clone)
     assert "origin/feature" in refs
     assert "origin/main" in refs
 
 
-def test_remote_branches_excludes_head_symref(tmp_path):
+def test_remote_branches_excludes_head_symref(tmp_path: Path):
     _src, clone = _clone_with_feature(tmp_path)
     refs = remote_branches(clone)
     assert "origin/HEAD" not in refs
@@ -111,12 +113,12 @@ def test_remote_branches_excludes_head_symref(tmp_path):
     assert "origin" not in refs
 
 
-def test_remote_branches_returns_no_phantom_remote_entry(tmp_path):
+def test_remote_branches_returns_no_phantom_remote_entry(tmp_path: Path):
     _src, clone = _clone_with_feature(tmp_path)
     assert all("/" in ref for ref in remote_branches(clone))
 
 
-def test_commits_in_range_excludes_base_history(tmp_path):
+def test_commits_in_range_excludes_base_history(tmp_path: Path):
     # Only the commits the branch introduces, or every branch would match the
     # user, because their commits sit in the base branch's history.
     src = make_repo(tmp_path / "src")
@@ -132,7 +134,7 @@ def test_commits_in_range_excludes_base_history(tmp_path):
     assert authors == ["Other <o@x.com>"]
 
 
-def test_merged_then_reverted_branch_reports_merged(tmp_path):
+def test_merged_then_reverted_branch_reports_merged(tmp_path: Path):
     # A documented limitation: reverting does not remove ancestry, so the
     # merge is a genuine no-op and the trees match.
     src = make_repo(tmp_path / "src")

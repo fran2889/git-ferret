@@ -17,7 +17,7 @@ from git_ferret.models import RepoReport
 from tests.helpers import commit, make_repo, run
 
 
-def _upstream_with_squash_merged(tmp_path):
+def _upstream_with_squash_merged(tmp_path: Path):
     """A remote whose `feat` is squash-merged into main."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\nb\n")
@@ -31,14 +31,14 @@ def _upstream_with_squash_merged(tmp_path):
     return src
 
 
-def test_never_fetched_repo_falls_back_to_local_base(tmp_path):
+def test_never_fetched_repo_falls_back_to_local_base(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
     assert resolve_base_ref(repo) == "main"
 
 
-def test_merged_uses_origin_base_after_fetching(tmp_path, capsys):
+def test_merged_uses_origin_base_after_fetching(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     # A repo with a remote configured but never fetched: before the run there is
     # no origin/main, so resolving the base first would judge against a local
     # main that is 40 commits behind.
@@ -57,7 +57,7 @@ def test_merged_uses_origin_base_after_fetching(tmp_path, capsys):
     assert "origin/feat" in out
 
 
-def test_ground_truth_is_merged_after_the_run(tmp_path):
+def test_ground_truth_is_merged_after_the_run(tmp_path: Path):
     src = _upstream_with_squash_merged(tmp_path)
     repo = make_repo(tmp_path / "local")
     (repo / "f.txt").write_text("a\nb\n")
@@ -68,7 +68,9 @@ def test_ground_truth_is_merged_after_the_run(tmp_path):
     assert merge_verdict(repo, "origin/main", "origin/feat").value == "MERGED"
 
 
-def test_stale_state_under_no_fetch_is_flagged_stale(tmp_path, capsys):
+def test_stale_state_under_no_fetch_is_flagged_stale(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     # --no-fetch must never be silently treated as fresh.
     src = _upstream_with_squash_merged(tmp_path)
     repo = make_repo(tmp_path / "r")
@@ -83,7 +85,9 @@ def test_stale_state_under_no_fetch_is_flagged_stale(tmp_path, capsys):
     assert "stale" in out.lower()
 
 
-def test_heading_does_not_claim_a_fetch_that_did_not_happen(tmp_path, capsys):
+def test_heading_does_not_claim_a_fetch_that_did_not_happen(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     src = _upstream_with_squash_merged(tmp_path)
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\nb\n")
@@ -95,7 +99,7 @@ def test_heading_does_not_claim_a_fetch_that_did_not_happen(tmp_path, capsys):
     assert "fetched 202" not in out or "stale" in out.lower()
 
 
-def test_successful_fetch_is_not_reported_stale(tmp_path, capsys):
+def test_successful_fetch_is_not_reported_stale(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     src = _upstream_with_squash_merged(tmp_path)
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\nb\n")
@@ -106,11 +110,13 @@ def test_successful_fetch_is_not_reported_stale(tmp_path, capsys):
     assert "stale" not in out.lower()
 
 
-def test_missing_path_is_a_usage_error(tmp_path):
+def test_missing_path_is_a_usage_error(tmp_path: Path):
     # The exit code is asserted end to end in test_freshness_and_exit.py
     # against the real entry point; this only pins that the command refuses
     # rather than degrading to an empty, exit-0 report.
-    from git_ferret.cli import UsageError, _resolve_root
+    # _resolve_root is private, and reaching for it is the point: the exit code
+    # is covered end to end elsewhere, this pins the refusal itself.
+    from git_ferret.cli import UsageError, _resolve_root  # pyright: ignore[reportPrivateUsage]
 
     with pytest.raises(UsageError):
         _resolve_root(tmp_path / "nope")

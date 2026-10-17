@@ -4,24 +4,28 @@ Each maps to a finding: a marker that misleads, a feature the spec requires and
 the plan assigned but never wired, or a correctness bug reachable in ordinary use.
 """
 
+from pathlib import Path
+
+import pytest
+
 from git_ferret.analysis.health import report_remote_health
 from git_ferret.analysis.local import analyse_local, worktree_status
 from git_ferret.analysis.merged import merge_verdict
 from git_ferret.analysis.remote import analyse_merged_candidates, analyse_remote
 from git_ferret.config import Config, identity_matches, resolve_identities
 from git_ferret.gitops import resolve_base_ref
-from git_ferret.models import RepoReport, Status
+from git_ferret.models import BranchInfo, RepoReport, Status
 from tests.helpers import clone_local, commit, make_repo, run
 
 
-def _base(repo):
+def _base(repo: Path) -> str | None:
     return resolve_base_ref(repo)
 
 
 # --- I1: a remote branch is fully pushed by construction -----------------------
 
 
-def test_unmerged_remote_branch_is_not_reported_as_not_pushed(tmp_path):
+def test_unmerged_remote_branch_is_not_reported_as_not_pushed(tmp_path: Path):
     # `merged` iterates remote refs, so every branch it lists is pushed.
     # [NOT PUSHED] would read as "you have unpushed work".
     src = make_repo(tmp_path / "src")
@@ -42,7 +46,7 @@ def test_unmerged_remote_branch_is_not_reported_as_not_pushed(tmp_path):
 # --- I2: a second remote's main/master is a real branch -----------------------
 
 
-def test_other_remotes_main_is_not_silently_dropped(tmp_path):
+def test_other_remotes_main_is_not_silently_dropped(tmp_path: Path):
     origin_src = make_repo(tmp_path / "origin-src")
     (origin_src / "f.txt").write_text("a\n")
     commit(origin_src, "base")
@@ -67,7 +71,7 @@ def test_other_remotes_main_is_not_silently_dropped(tmp_path):
 # --- I3: unreachable remote ----------------------------------------------------
 
 
-def test_fetch_failure_produces_an_unreachable_finding(tmp_path):
+def test_fetch_failure_produces_an_unreachable_finding(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -77,7 +81,7 @@ def test_fetch_failure_produces_an_unreachable_finding(tmp_path):
     assert any(f.status is Status.UNREACHABLE for f in report.findings)
 
 
-def test_repo_without_a_remote_is_reported_unreachable(tmp_path):
+def test_repo_without_a_remote_is_reported_unreachable(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -86,7 +90,9 @@ def test_repo_without_a_remote_is_reported_unreachable(tmp_path):
     assert any(f.status is Status.UNREACHABLE for f in report.findings)
 
 
-def test_remote_and_merged_report_a_repo_without_a_remote(tmp_path, capsys):
+def test_remote_and_merged_report_a_repo_without_a_remote(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     # `local` reported a missing remote but `remote` and `merged` stayed silent:
     # a repository with no remote produced a heading and nothing else, which
     # reads as "nothing to clean" rather than "could not look".
@@ -106,7 +112,7 @@ def test_remote_and_merged_report_a_repo_without_a_remote(tmp_path, capsys):
 # --- I4: stashes ----------------------------------------------------------------
 
 
-def test_stashes_are_reported(tmp_path):
+def test_stashes_are_reported(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -118,7 +124,7 @@ def test_stashes_are_reported(tmp_path):
     assert "half-finished work" in stash.detail
 
 
-def test_no_stash_is_not_reported(tmp_path):
+def test_no_stash_is_not_reported(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
@@ -129,7 +135,7 @@ def test_no_stash_is_not_reported(tmp_path):
 # --- I5: last commit age and the supporting detail ----------------------------
 
 
-def test_last_commit_age_is_carried_on_a_finding(tmp_path):
+def test_last_commit_age_is_carried_on_a_finding(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -141,7 +147,7 @@ def test_last_commit_age_is_carried_on_a_finding(tmp_path):
     assert "ago" in f.detail
 
 
-def test_upstream_deleted_reports_unpushed_count(tmp_path):
+def test_upstream_deleted_reports_unpushed_count(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -161,37 +167,37 @@ def test_upstream_deleted_reports_unpushed_count(tmp_path):
 # --- I6/I7: identity parsing ---------------------------------------------------
 
 
-def test_comma_separated_author_is_split(tmp_path):
+def test_comma_separated_author_is_split(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     got = resolve_identities(["a@x.com,b@y.com"], Config(), repo)
     assert got == ["a@x.com", "b@y.com"]
 
 
-def test_comma_separated_toml_author_is_split(tmp_path):
+def test_comma_separated_toml_author_is_split(tmp_path: Path):
     path = tmp_path / "c.toml"
     path.write_text('author = "a@x.com,b@y.com"\n')
     assert Config.load(path).author == ["a@x.com", "b@y.com"]
 
 
-def test_toml_list_author_is_split_too(tmp_path):
+def test_toml_list_author_is_split_too(tmp_path: Path):
     path = tmp_path / "c.toml"
     path.write_text('author = ["a@x.com", "b@y.com"]\n')
     assert Config.load(path).author == ["a@x.com", "b@y.com"]
 
 
-def test_empty_author_string_never_matches(tmp_path):
+def test_empty_author_string_never_matches(tmp_path: Path):
     # `--author ""` resolves to [""], a non-empty list whose sole member is the
     # empty substring, which would match every commit.
     assert identity_matches(["Someone <x@y.com>"], [""]) is False
 
 
-def test_empty_author_is_dropped_during_resolution(tmp_path):
+def test_empty_author_is_dropped_during_resolution(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     got = resolve_identities(["", "  "], Config(), repo)
     assert got == []
 
 
-def test_blank_entries_are_dropped_but_real_ones_kept(tmp_path):
+def test_blank_entries_are_dropped_but_real_ones_kept(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     assert resolve_identities(["", "real@x.com"], Config(), repo) == ["real@x.com"]
 
@@ -199,7 +205,9 @@ def test_blank_entries_are_dropped_but_real_ones_kept(tmp_path):
 # --- I8: the gate must not re-list branches per candidate ----------------------
 
 
-def test_merged_does_not_rescan_branches_per_candidate(tmp_path, monkeypatch):
+def test_merged_does_not_rescan_branches_per_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     import git_ferret.analysis.remote as remote_mod
 
     src = make_repo(tmp_path / "src")
@@ -215,10 +223,10 @@ def test_merged_does_not_rescan_branches_per_candidate(tmp_path, monkeypatch):
     clone = clone_local(src, tmp_path / "clone")
     run(clone, "fetch", "--all", "--prune")
 
-    calls = []
+    calls: list[Path] = []
     original = remote_mod.list_branches
 
-    def counting(repo):
+    def counting(repo: Path) -> list[BranchInfo]:
         calls.append(repo)
         return original(repo)
 
@@ -231,7 +239,7 @@ def test_merged_does_not_rescan_branches_per_candidate(tmp_path, monkeypatch):
 # --- I11: the cleanliness gate must fail closed --------------------------------
 
 
-def test_worktree_status_does_not_report_unreadable_as_clean(tmp_path):
+def test_worktree_status_does_not_report_unreadable_as_clean(tmp_path: Path):
     not_a_repo = tmp_path / "plain"
     not_a_repo.mkdir()
     dirty, _ = worktree_status(not_a_repo)
@@ -241,7 +249,7 @@ def test_worktree_status_does_not_report_unreadable_as_clean(tmp_path):
 # --- M1: shallow granularity ---------------------------------------------------
 
 
-def test_shallow_repo_reports_unknown_rather_than_conflicts(tmp_path):
+def test_shallow_repo_reports_unknown_rather_than_conflicts(tmp_path: Path):
     # A depth-1 clone genuinely lacks the merge base, so UNKNOWN is the honest
     # verdict. What matters is that it is never CONFLICTS, which would be a
     # fabricated conflict, and never MERGED.
@@ -256,7 +264,7 @@ def test_shallow_repo_reports_unknown_rather_than_conflicts(tmp_path):
     assert merge_verdict(clone, "origin/main", "origin/open").value == "UNKNOWN"
 
 
-def test_deep_clone_of_same_history_is_not_unknown(tmp_path):
+def test_deep_clone_of_same_history_is_not_unknown(tmp_path: Path):
     # The counterpart: when the objects are present the merge resolves, so the
     # shallow handling must not blanket-UNKNOWN every repository.
     src = make_repo(tmp_path / "src")
