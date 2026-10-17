@@ -1,6 +1,9 @@
 .DEFAULT_GOAL := help
 PYTHON ?= python3
 SOURCES := git_ferret tests
+# Every optional-dependency group in pyproject.toml. Kept in one place so a new
+# group cannot be added to pyproject.toml and forgotten here.
+EXTRAS := audit,build,lint,test,type
 
 .PHONY: help install format format-check lint lint-fix typecheck test coverage build audit clean check ci
 
@@ -10,7 +13,7 @@ help: ## Show this help
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
 install: ## Install the package and dev tools (editable)
-	$(PYTHON) -m pip install -e ".[dev]"
+	$(PYTHON) -m pip install -e ".[$(EXTRAS)]"
 
 format: ## Format the code with ruff
 	$(PYTHON) -m ruff format $(SOURCES)

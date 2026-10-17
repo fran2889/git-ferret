@@ -15,15 +15,15 @@ license-files = ["LICENSE"]
 dependencies = ["typer>=0.12", "rich>=13", "click>=8.1"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8",
-    "pytest-cov>=6",
-    "ruff~=0.17.1",
-    "pyright[nodejs]~=1.1.414",
-    "build>=1.3",
-    "twine>=6",
-    "pip-audit>=2.10",
-]
+# Split by tool so a CI job installs only what it runs. There is no `dev`
+# umbrella: a self-referential extra (`dev = ["git-ferrat[lint,test]"]`) does
+# not resolve for a package that is not on an index yet. `make install`
+# asks for all of these at once.
+lint = ["ruff~=0.17.1"]
+type = ["pyright[nodejs]~=1.1.414"]
+test = ["pytest>=8", "pytest-cov>=6"]
+build = ["build>=1.3", "twine>=6"]
+audit = ["pip-audit>=2.10"]
 
 [project.scripts]
 git-ferret = "git_ferret.cli:main"

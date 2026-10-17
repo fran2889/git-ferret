@@ -19,12 +19,9 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+            - uses: ./.github/actions/setup
               with:
-                  python-version: '3.13'
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
-            - run: python -m pip install -e ".[dev]"
+                  extras: lint
             - run: make format-check lint PYTHON=python
 
     type-check:
@@ -32,12 +29,9 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+            - uses: ./.github/actions/setup
               with:
-                  python-version: '3.13'
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
-            - run: python -m pip install -e ".[dev]"
+                  extras: type
             - run: make typecheck PYTHON=python
 
     test:
@@ -49,12 +43,10 @@ jobs:
                 python-version: ['3.11', '3.12', '3.13', '3.14']
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+            - uses: ./.github/actions/setup
               with:
                   python-version: ${{ matrix.python-version }}
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
-            - run: python -m pip install -e ".[dev]"
+                  extras: test
             - run: make test PYTHON=python
 
     coverage:
@@ -62,12 +54,9 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+            - uses: ./.github/actions/setup
               with:
-                  python-version: '3.13'
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
-            - run: python -m pip install -e ".[dev]"
+                  extras: test
             - run: make coverage PYTHON=python
             - name: Upload coverage results
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -83,12 +72,9 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+            - uses: ./.github/actions/setup
               with:
-                  python-version: '3.13'
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
-            - run: python -m pip install -e ".[dev]"
+                  extras: build
             - run: make build PYTHON=python
             - name: Smoke-test the wheel
               run: |
@@ -106,12 +92,9 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+            - uses: ./.github/actions/setup
               with:
-                  python-version: '3.13'
-                  cache: 'pip'
-                  cache-dependency-path: pyproject.toml
-            - run: python -m pip install -e ".[dev]"
+                  extras: audit
             - name: Audit dependencies
               run: make audit PYTHON=python
 
