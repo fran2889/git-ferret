@@ -1,5 +1,19 @@
-"""Tests for the CLI surface."""
+r"""Tests for the CLI surface.
 
+Every assertion here is made against unstyled text. Rich styles a flag one
+hyphen-separated run at a time, so ``--no-fetch`` renders as three
+escape-wrapped fragments and the literal string is nowhere to be found:
+
+    \x1b[1;36m-\x1b[0m\x1b[1;36m-no\x1b[0m\x1b[1;36m-fetch\x1b[0m
+
+Whether rich emits colour at all depends on the environment rather than on the
+CLI: GitHub Actions sets ``GITHUB_ACTIONS``, which rich reads as "this output
+will be rendered", so an assertion written against raw output passes on a
+developer's terminal and fails in CI over a difference in styling that has
+nothing to do with what is documented.
+"""
+
+from click import unstyle
 from typer.testing import CliRunner
 
 from git_ferret.cli import build_parser
@@ -7,41 +21,43 @@ from git_ferret.cli import build_parser
 runner = CliRunner()
 
 
+def _help(*args: str) -> str:
+    """The help text for a subcommand, with rich's styling removed."""
+    res = runner.invoke(build_parser(), [*args, "--help"])
+    assert res.exit_code == 0
+    return unstyle(res.stdout)
+
+
 def test_has_three_subcommands():
     res = runner.invoke(build_parser(), ["--help"])
     assert res.exit_code == 0
     for cmd in ("local", "remote", "merged"):
-        assert cmd in res.stdout
+        assert cmd in unstyle(res.stdout)
 
 
 def test_local_help_lists_no_fetch():
-    res = runner.invoke(build_parser(), ["local", "--help"])
-    assert res.exit_code == 0
-    assert "--no-fetch" in res.stdout
+    assert "--no-fetch" in _help("local")
 
 
 def test_remote_help_lists_branch_filter():
-    res = runner.invoke(build_parser(), ["remote", "--help"])
-    assert "--branch" in res.stdout
-    assert "--author" in res.stdout
+    help_text = _help("remote")
+    assert "--branch" in help_text
+    assert "--author" in help_text
 
 
 def test_merged_help_lists_filters():
-    res = runner.invoke(build_parser(), ["merged", "--help"])
-    assert "--author" in res.stdout
-    assert "--branch" in res.stdout
+    help_text = _help("merged")
+    assert "--author" in help_text
+    assert "--branch" in help_text
 
 
 def test_local_help_lists_update_flag():
-    res = runner.invoke(build_parser(), ["local", "--help"])
-    assert "--update" in res.stdout
+    assert "--update" in _help("local")
 
 
 def test_update_is_not_on_remote():
-    res = runner.invoke(build_parser(), ["remote", "--help"])
-    assert "--update" not in res.stdout
+    assert "--update" not in _help("remote")
 
 
 def test_local_help_documents_it_does_not_write_by_default():
-    res = runner.invoke(build_parser(), ["local", "--help"])
-    assert "--update" in res.stdout
+    assert "--update" in _help("local")
