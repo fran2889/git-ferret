@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import typer
 
 from git_ferret import cli
 from git_ferret.cli import UsageError
@@ -98,6 +99,30 @@ def test_the_run_itself_raises_usage_error() -> None:
     # The entry point is what turns this into an exit code, so it is asserted
     # where the conversion happens.
     assert issubclass(UsageError, Exception)
+
+
+def test_an_explicit_exit_code_from_a_command_is_honoured(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Under standalone_mode=False typer hands the code back as a return value
+    # rather than raising it, so nothing in main() ever sees a typer.Exit to
+    # catch. A command that asked for a code of its own has to get it; dropping
+    # the return would silently give it 0 instead.
+    app = typer.Typer()
+
+    @app.command()
+    def boom() -> None:
+        raise typer.Exit(7)
+
+    # A second command so typer keeps this a group: with one command it
+    # collapses into a root command that takes no subcommand name, and `boom`
+    # below would be read as an unexpected argument rather than run.
+    @app.command()
+    def other() -> None:
+        pass
+
+    monkeypatch.setattr(cli, "app", app)
+    assert _main(["boom"]) == 7
 
 
 def test_one_unreadable_repository_does_not_stop_the_run(

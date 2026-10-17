@@ -331,17 +331,23 @@ def main() -> None:
     it a mistyped flag escapes as an unhandled exception, which means a
     traceback for what is a typo, and an exit code that is 1 only because
     unhandled exceptions happen to be.
+
+    The same mode decides how an exit *code* comes back. Rather than raising,
+    typer returns it -- the command's own return value, or the code of any
+    ``typer.Exit`` it raised -- so the return value is what has to be read here.
     """
     try:
-        app(standalone_mode=False)
+        code = app(standalone_mode=False)
     except _USAGE_ERRORS as exc:
         _warn(f"error: {exc}")
         raise SystemExit(1) from None
     except typer.Abort:
         _warn("aborted")
         raise SystemExit(1) from None
-    except typer.Exit as exc:
-        raise SystemExit(exc.exit_code) from None
+    # Every command is annotated `-> None`, so a return value here is the exit
+    # code of a `typer.Exit` a command raised deliberately. Anything else is a
+    # successful run.
+    raise SystemExit(code if isinstance(code, int) else 0)
 
 
 if __name__ == "__main__":
