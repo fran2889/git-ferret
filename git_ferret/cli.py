@@ -143,16 +143,15 @@ class UsageError(Exception):
 
 
 # Everything the entry point treats as "you typed it wrong": the tool's own
-# error, plus the framework's from whichever copy of it is in play. typer 0.14
-# vendored its own copy of click, so from there on an unknown flag arrives as
-# typer's NoSuchOption rather than click's, and an `except` clause written
-# against click's classes misses it entirely: the error escapes unhandled and
-# the user gets a traceback for a typo. 0.13, still supported, raises click's.
-# All three stringify to the message the user needs, which is why one handler
-# covers them.
+# error, plus the framework's. typer has exposed its own exception hierarchy
+# since 0.27.2 -- the floor in pyproject.toml -- so an unknown flag or command
+# arrives as typer's, not click's, and an `except` clause written against
+# click's classes misses it entirely: the error escapes unhandled and the user
+# gets a traceback for a typo. Both stringify to the message the user needs,
+# which is why one handler covers them.
 _USAGE_ERRORS: tuple[type[Exception], ...] = (
     UsageError,
-    getattr(typer, "TyperException", click.ClickException),
+    typer.TyperException,
     click.ClickException,
 )
 

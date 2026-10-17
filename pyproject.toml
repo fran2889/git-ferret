@@ -12,10 +12,13 @@ readme = "README.md"
 requires-python = ">=3.14"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
-# 0.13 is the floor, not 0.12: a command annotated `str | None` fails to build
-# on 0.12 with "Type not yet supported". 0.13 is also the last release that
-# raises click's exceptions rather than its own, which main() accounts for.
-dependencies = ["typer>=0.13", "rich>=13", "click>=8.1"]
+# 0.27.2 is the floor because it is the first release that exposes its own
+# exception hierarchy (`typer.TyperException`). Below it an unknown flag
+# arrives as an exception from whichever copy of click is in play -- typer
+# vendored its own at 0.26.0 -- and main()'s handler cannot cover both without
+# probing the installed version at runtime, which leaves 0.26.x-0.27.1 raising
+# a traceback for a typo.
+dependencies = ["typer>=0.27.2", "rich>=13", "click>=8.1"]
 
 [project.optional-dependencies]
 # Split by tool so a CI job installs only what it runs. There is no `dev`
