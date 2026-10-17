@@ -172,7 +172,7 @@ def test_an_unreadable_base_tree_is_not_claimed_as_merged(
     run(clone, "fetch", "--all", "--prune")
     assert merge_verdict(clone, "origin/main", "origin/feature") is MergeVerdict.MERGED
 
-    def unreadable_tree(repo: Path, ref: str) -> None:
+    def unreadable_tree(repo: Path, ref: str) -> str | None:
         return None
 
     monkeypatch.setattr(merged_module, "tree_hash", unreadable_tree)

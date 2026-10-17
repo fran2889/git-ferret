@@ -68,6 +68,7 @@ def test_an_unknown_command_is_one_line_and_not_a_traceback(
     err = capsys.readouterr().err
     assert "sideways" in err
     assert "Traceback" not in err
+    assert len(err.strip().splitlines()) == 1
 
 
 def test_an_interrupt_is_reported_and_exits_one(

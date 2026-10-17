@@ -234,8 +234,11 @@ def _clone_with_both_trunks(tmp_path: Path) -> Path:
 
 
 def test_the_base_remotes_own_trunk_is_never_a_candidate(tmp_path: Path):
-    # Whichever of the two names the trunk uses, it is not a branch to recommend
-    # deleting. A second remote's main is a different branch and stays eligible.
+    # Whichever of the two names the trunk uses, neither is a branch to
+    # recommend deleting: `origin/master` as the base ref itself, and
+    # `origin/main` because it is the same remote's other trunk name. A second
+    # remote's `main` is a different branch and stays eligible, which
+    # test_other_remotes_main_is_not_silently_dropped covers.
     clone = _clone_with_both_trunks(tmp_path)
     rep = analyse_remote(clone, Config(), "origin/master", [], None)
     names = _names(rep)
