@@ -34,8 +34,15 @@ jobs:
               with:
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Approve and enable auto-merge for patch updates
-              if: steps.meta.outputs.update-type == 'version-update:semver-patch'
+            - name: Approve and enable auto-merge for pip patch updates
+              # Only library patches merge unattended. A GitHub Actions bump is
+              # a patch too, and merging one executes new code in every
+              # workflow in this repository on the next push -- a compromised
+              # action release would run without anyone reading it. Action
+              # bumps are reviewed by a person like everything else.
+              if: >-
+                  steps.meta.outputs.update-type == 'version-update:semver-patch'
+                  && steps.meta.outputs.package-ecosystem == 'pip'
               run: |
                   gh pr review --approve "$PR_URL"
                   gh pr merge --auto --squash "$PR_URL"
