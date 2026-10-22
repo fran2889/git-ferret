@@ -22,7 +22,7 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: lint
-            - run: make format-check lint PYTHON=python
+            - run: make format-check lint check-spdx PYTHON=python
 
     type-check:
         runs-on: ubuntu-latest

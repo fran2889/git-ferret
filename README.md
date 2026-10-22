@@ -388,12 +388,13 @@ $ make install
 $ make check
 ```
 
-`make check` runs formatting, linting, type checking, and the test suite. The individual targets:
+`make check` runs formatting, linting, the SPDX header check, type checking, and the test suite. The individual targets:
 
 | Command | What it does |
 |---|---|
 | `make format` / `make format-check` | Format, or check formatting, with ruff |
 | `make lint` / `make lint-fix` | Lint, or lint and apply safe fixes |
+| `make check-spdx` | Check that every Python source file names its licence |
 | `make typecheck` | Type check with pyright (strict) |
 | `make test` | Run the test suite |
 | `make coverage` | Run the suite and write HTML and XML coverage reports |
@@ -411,8 +412,9 @@ is the `audit` extra's toolchain as well.
 `make help` lists everything. Every target runs `python -m ...`, so `PYTHON` selects the
 interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.
 
-CI runs the same targets on every push and pull request: formatting and linting, pyright, the test
-suite on Python 3.14, coverage, a wheel build with a CLI smoke test, and a `pip-audit` scan.
+CI runs the same targets on every push and pull request: formatting and linting, the SPDX header
+check, pyright, the test suite on Python 3.14, coverage, a wheel build with a CLI smoke test, and a
+`pip-audit` scan.
 Releases are cut by release-please from Conventional Commits.
 
 The test suite builds real git repositories and runs real `git` commands, no mocked git, because
