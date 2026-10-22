@@ -34,7 +34,7 @@ lint-fix: ## Lint and apply safe fixes
 	$(PYTHON) -m ruff check --fix $(SOURCES)
 
 check-spdx: ## Check that every Python source file names its licence
-	$(PYTHON) scripts/check_spdx.py
+	$(PYTHON) scripts/check_spdx.py $(SOURCES)
 
 typecheck: ## Type check with pyright (strict)
 	$(PYTHON) -m pyright --pythonpath "$$($(PYTHON) -c 'import sys; print(sys.executable)')"

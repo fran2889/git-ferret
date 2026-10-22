@@ -44,8 +44,24 @@ def test_non_python_files_are_ignored(tmp_path: Path) -> None:
     assert missing_headers([tmp_path]) == []
 
 
-def test_missing_roots_are_ignored(tmp_path: Path) -> None:
-    assert missing_headers([tmp_path / "absent"]) == []
+def test_missing_roots_are_an_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["check_spdx", str(tmp_path / "absent")]) == 1
+    assert "does not exist" in capsys.readouterr().err
+
+
+def test_running_without_roots_is_a_usage_error(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["check_spdx"]) == 2
+    assert "usage:" in capsys.readouterr().err
+
+
+def test_the_message_names_only_the_missing_line(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _source(tmp_path / "half.py", f"{LICENSE}\n")
+    assert main(["check_spdx", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert COPYRIGHT in err
+    assert LICENSE not in err
 
 
 def test_main_fails_and_names_the_file(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

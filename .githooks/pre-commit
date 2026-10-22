@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Fran
+# SPDX-License-Identifier: GPL-3.0-only
 # Format and lint the Python files in this commit, then re-stage them.
 #
 # Mirrors lint-staged without adding a Node toolchain: only staged files are
-# touched, so a commit never reformats unrelated work.
+# touched. A file with unstaged changes is refused rather than staged whole,
+# so a commit never swallows work the user did not stage.
 
 set -euo pipefail
 source "$(dirname "$0")/common.sh"
@@ -10,13 +13,27 @@ source "$(dirname "$0")/common.sh"
 run_global_hook pre-commit "$@"
 
 files=()
-while IFS= read -r file; do
-    [ -n "$file" ] && files+=("$file")
-done < <(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+while IFS= read -r -d '' file; do
+    files+=("$file")
+done < <(git diff --cached --name-only -z --diff-filter=ACMR -- '*.py')
 
 [ "${#files[@]}" -eq 0 ] && exit 0
 
+partial=()
+for file in "${files[@]}"; do
+    if ! git diff --quiet -- "$file"; then
+        partial+=("$file")
+    fi
+done
+
+if [ "${#partial[@]}" -gt 0 ]; then
+    printf 'pre-commit: refusing to touch files with unstaged changes:\n' >&2
+    printf '  %s\n' "${partial[@]}" >&2
+    printf 'Stage or stash them, then commit again.\n' >&2
+    exit 1
+fi
+
 python=$(python_bin)
-"$python" -m ruff format "${files[@]}"
-"$python" -m ruff check --fix "${files[@]}"
+"$python" -m ruff format -- "${files[@]}"
+"$python" -m ruff check --fix -- "${files[@]}"
 git add -- "${files[@]}"
