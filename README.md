@@ -130,10 +130,18 @@ builds a snapshot of the directory and caches that, so later edits are not picke
 ### Check your install
 
 ```console
+$ git-ferret --version
+git-ferret 0.1.0
 $ git-ferret local ~/src --no-fetch | head
 ```
 
 A run over a directory of real repositories should print a report and exit 0.
+
+## Troubleshooting
+
+Most problems are in the install, not the scan. If a report looks wrong, read the `fetched ...` line
+on the repository first: when a repository was read without a successful fetch, the report says so,
+and a warning appears once at the top of the run.
 
 ### When the venv breaks
 

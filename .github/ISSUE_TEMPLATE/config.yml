@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+    - name: Troubleshooting
+      url: https://github.com/fran2889/git-ferret#troubleshooting
+      about: Installation problems, stale reports, and other common fixes.
+    - name: Report a security vulnerability
+      url: https://github.com/fran2889/git-ferret/security/advisories/new
+      about: Report vulnerabilities privately, not as public issues.
