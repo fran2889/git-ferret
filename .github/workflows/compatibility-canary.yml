@@ -1,0 +1,63 @@
+name: Compatibility Canary
+
+# A canary, not a merge gate: it answers "does the suite still pass on the
+# newest Python and git?", and it never runs on a pull request. A failure opens
+# an issue rather than blocking a merge.
+on:
+    schedule:
+        - cron: '17 6 * * 1'
+    workflow_dispatch:
+
+permissions:
+    contents: read
+    issues: write
+
+jobs:
+    canary:
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Install the newest git
+              run: |
+                  sudo add-apt-repository -y ppa:git-core/ppa
+                  sudo apt-get update
+                  sudo apt-get install -y git
+
+            - uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
+              with:
+                  version: '0.9.26'
+                  python-version: '3.x'
+                  enable-cache: true
+                  cache-dependency-glob: uv.lock
+
+            - name: Install from the lockfile
+              run: uv sync --locked --all-extras
+
+            - name: Show the versions under test
+              run: |
+                  uv run --no-sync python --version
+                  git --version
+
+            - name: Run the suite
+              run: uv run --no-sync python -m pytest
+
+            - name: Open an issue on failure
+              if: failure()
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  title="Compatibility canary failed ($(date -u +%Y-%m-%d))"
+                  existing=$(gh issue list --state open --search "Compatibility canary failed in:title" \
+                      --json number --jq '.[0].number // empty')
+                  body=$(printf '%s\n\n%s\n\n%s\n' \
+                      "The weekly compatibility canary failed on the newest Python and git available." \
+                      "Run: $RUN_URL" \
+                      "Fix the compatibility break, or narrow the canary if the newest release is not meant to be supported yet.")
+                  if [ -n "$existing" ]; then
+                      gh issue comment "$existing" --body "$body"
+                  else
+                      gh issue create --title "$title" --body "$body" --label bug
+                  fi

@@ -126,7 +126,7 @@ on every commit, so its edge cases are worth covering.
 - `git_ferret/report.py`: markdown rendering and the TTY-only rich path.
 - `tests/`: the suite and its fixture builders.
 - `scripts/`: coverage summary, commit-message checker, and SPDX checker.
-- `.github/`: CI, release automation, and the issue and pull request templates.
+- `.github/`: CI, dependency review, the compatibility canary, release automation, and templates.
 
 ## Documentation
 
@@ -140,6 +140,17 @@ The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cros
 job, coverage, build, and audit. Dependency review is a separate check and is meant to be required
 in the repository ruleset as well. release-please is the only release path; do not hand-edit
 versions or tags.
+
+The compatibility canary runs the suite weekly on the newest stable Python and the newest git. It is
+not a merge gate and never runs on a pull request; a failure opens or updates a single issue with
+the run link. To reproduce, install the newest Python and git available, then:
+
+```console
+$ uv sync --locked --all-extras
+$ uv run --no-sync python -m pytest
+```
+
+The workflow log names the exact versions it used, so compare those with the ones you have.
 
 ## Licensing
 
