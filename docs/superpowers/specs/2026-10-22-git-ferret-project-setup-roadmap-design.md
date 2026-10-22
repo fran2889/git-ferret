@@ -8,9 +8,9 @@ reports, the contributor and agent documentation that tells someone how to
 work here, the local hooks that catch what CI would catch, and the release and
 documentation structure that makes the project maintainable over time.
 
-This roadmap closes that gap, using flix-monkey as the reference. It is about
-setup, not features. No product behaviour changes except the one small CLI
-addition the bug report template requires.
+This roadmap closes that gap. It is about setup, not features. No product
+behaviour changes except the one small CLI addition the bug report template
+requires.
 
 ## Deliverables
 
@@ -55,11 +55,11 @@ describe, to be picked up later.
 
 ## Anti-goals
 
-- Copying instructions that already live in a file. Flix-monkey's AGENTS.md
-  says "read package.json rather than trusting a copy"; the same discipline
-  applies to the Makefile, `pyproject.toml`, and the workflows.
+- Copying instructions that already live in a file. The `Makefile`,
+  `pyproject.toml`, and the workflows are the source of truth, and
+  documentation points to them rather than restating them.
 - Ceremony for its own sake. A template line that no reporter can fill in is
-  removed, not kept for symmetry with flix-monkey.
+  removed, not kept to fill out a template.
 - Making the checks slower without making them catch more.
 
 ## Constraints
@@ -68,9 +68,8 @@ describe, to be picked up later.
   `uvx --from git+https://github.com/fran2889/git-ferret git-ferret`.
 - `requires-python = ">=3.14"`, so CI's interpreter matrix stays on one
   version unless that floor changes.
-- No Node.js in the repository. Anything flix-monkey does with husky,
-  lint-staged, or commitlint is translated to a Python-native equivalent
-  rather than bolted on with npm.
+- No Node.js in the repository. Local checks are Python-native: checked-in git
+  hooks and small tested scripts, not an npm toolchain.
 - Existing behaviours that the README promises (read-only, exit codes,
   markdown output) must not change.
 
@@ -79,7 +78,7 @@ describe, to be picked up later.
 This phase is executed immediately, because every issue created afterwards
 uses it.
 
-- `.github/ISSUE_TEMPLATE/bug-report.md`, translated from flix-monkey.
+- `.github/ISSUE_TEMPLATE/bug-report.md`.
 - `.github/ISSUE_TEMPLATE/enhancement.md`, translated with CLI-flavoured
   Scope and Requirements sections.
 - `.github/ISSUE_TEMPLATE/config.yml` with blank issues disabled and contact
@@ -119,10 +118,10 @@ uses it.
 - Summary: one to three bullets, one behaviour change each
 - Test Plan: automated check that covers it, plus a manual command when the
   behaviour is hard to assert
-- Optional Breaking Changes and Notes sections, with the same limits as
-  flix-monkey
+- Optional Breaking Changes and Notes sections, with explicit limits: at most
+  three bullets, and no analysis process or rejected alternatives.
 
-### Conventions adopted from flix-monkey
+### Conventions
 
 - Issue titles are imperative, descriptive, and have no trailing period.
 - Issue templates apply `bug` and `enhancement`; other labels are deliberate.
@@ -139,7 +138,7 @@ uses it.
 
 ### `CONTRIBUTING.md`
 
-Translated from flix-monkey:
+The guide covers:
 
 - Development setup: clone, `uv sync` or `make install`, run `make check`.
 - Pull request process: branch name, Conventional Commits, tests required,
@@ -189,9 +188,8 @@ decision; a CLI tool of this size does not need one yet.
 
 ### Git hooks
 
-Flix-monkey uses husky, lint-staged, and commitlint. The Python translation is
-a checked-in `.githooks/` directory plus `make hooks`, which sets
-`core.hooksPath` for this repository only:
+The local gate is a checked-in `.githooks/` directory plus `make hooks`, which
+sets `core.hooksPath` for this repository only:
 
 - `pre-commit`: `ruff format` and `ruff check --fix` on staged Python files,
   then re-stage them. Mirrors lint-staged.
@@ -200,8 +198,7 @@ a checked-in `.githooks/` directory plus `make hooks`, which sets
 - `commit-msg`: `python scripts/check_commit_msg.py "$1"`.
 
 Hooks chain to a configured global `core.hooksPath` before running their own
-work, the way flix-monkey's do, because setting `core.hooksPath` otherwise
-hides the global hooks.
+work, because setting `core.hooksPath` otherwise hides the global hooks.
 
 `scripts/check_commit_msg.py` enforces:
 
@@ -213,8 +210,7 @@ It gets unit tests, since it is code that runs on every commit.
 
 ### SPDX headers
 
-Flix-monkey puts an SPDX header on every `{src,tests}/**/*.ts` file and lets
-lint enforce it. git-ferret adopts the same convention:
+Every source file names its licence in a header, and `make check` enforces it:
 
 - Every `git_ferret/**/*.py`, `tests/**/*.py`, and `scripts/**/*.py` file
   starts with the GPL-3.0-only SPDX identifier and the copyright line.
@@ -243,9 +239,9 @@ lint enforce it. git-ferret adopts the same convention:
   locale encoding, paths must not assume `/`, and the report must survive a
   console that cannot render emoji. Product and test changes go in the same
   pull request as the jobs, and both jobs become required merge checks.
-- Add `.github/workflows/dependency-review.yml`, failing at moderate severity,
-  as flix-monkey does. It becomes a required check in the repository ruleset,
-  not just a red X beside the merge button.
+- Add `.github/workflows/dependency-review.yml`, failing at moderate severity.
+  It becomes a required check in the repository ruleset, not just a red X
+  beside the merge button.
 - Add a scheduled compatibility job: weekly, run the suite against the newest
   Python and git available, and open an issue on failure. It is a canary, not
   a merge gate, and never runs on pull requests.
@@ -274,7 +270,7 @@ lint enforce it. git-ferret adopts the same convention:
   token.
 - It downloads the artifacts attached to the GitHub release rather than
   rebuilding them, so what is published is what was tested.
-- Guarded by a tag-format check, like flix-monkey's store workflow.
+- Guarded by a tag-format check before any upload.
 - README install instructions switch the primary path to
   `uv tool install git-ferret` once it is live; the checkout path stays.
 - An issue tracks this and stays open until enabled.
