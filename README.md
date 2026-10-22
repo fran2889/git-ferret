@@ -65,8 +65,8 @@ $ uv run git-ferret --help
 ```
 
 `uv sync --locked` installs the runtime dependencies and the package in editable mode, and fails if
-`uv.lock` no longer matches `pyproject.toml`. Add `--all-extras` to install the tools behind
-`make check` as well.
+`uv.lock` no longer matches `pyproject.toml`. Add `--all-extras`, or run `make sync`, to install
+the tools behind `make check` as well.
 
 The pip route works too:
 
@@ -402,24 +402,40 @@ $ diff ~/reports/yesterday.md ~/reports/today.md
 
 ## Development
 
-Install the package with the dev tools, then run the checks:
+Install the package with the dev tools, then run the checks. With uv, one command builds the
+environment from the lockfile:
 
 ```console
-$ make install
-$ make check
+$ make sync
+$ make hooks
+$ make check PYTHON=.venv/bin/python
 ```
 
-`make check` runs formatting, linting, type checking, and the test suite. The individual targets:
+`make sync` is `uv sync --all-extras --locked`. The `PYTHON` override points the Makefile at that
+environment without requiring it to be active; once `.venv` is active, plain `make check` finds the
+tools. The pip route still works: run `make install` in place of `make sync`, activate the
+environment, then run `make hooks` and `make check`.
+
+`make hooks` points this repository at the checked-in `.githooks`. It sets
+`core.hooksPath` locally, so commits and pushes run the project's checks and
+Conventional Commits validation; it does not change your global git
+configuration. A Python file with unstaged changes is refused rather than
+staged whole.
+
+`make check` runs formatting, linting, the SPDX header check, type checking, and the test suite. The individual targets:
 
 | Command | What it does |
 |---|---|
 | `make format` / `make format-check` | Format, or check formatting, with ruff |
 | `make lint` / `make lint-fix` | Lint, or lint and apply safe fixes |
+| `make check-spdx` | Check that every Python source file names its licence |
 | `make typecheck` | Type check with pyright (strict) |
 | `make test` | Run the test suite |
 | `make coverage` | Run the suite and write HTML and XML coverage reports |
 | `make build` | Build the sdist and wheel in `dist/` |
 | `make audit` | Scan dependencies for known vulnerabilities with `pip-audit` |
+| `make hooks` | Point this repository at the checked-in `.githooks` |
+| `make sync` | Install every extra from `uv.lock`, failing if it is stale |
 | `make clean` | Remove build artifacts and caches |
 
 `make ci` runs everything the pipeline runs: the checks above plus `coverage`, `build`, and
@@ -432,8 +448,9 @@ is the `audit` extra's toolchain as well.
 `make help` lists everything. Every target runs `python -m ...`, so `PYTHON` selects the
 interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.
 
-CI runs the same targets on every push and pull request: formatting and linting, pyright, the test
-suite on Python 3.14, coverage, a wheel build with a CLI smoke test, and a `pip-audit` scan.
+CI runs the same targets on every push and pull request: formatting and linting, the SPDX header
+check, pyright, the test suite on Python 3.14, coverage, a wheel build with a CLI smoke test, and a
+`pip-audit` scan.
 Releases are cut by release-please from Conventional Commits.
 
 The test suite builds real git repositories and runs real `git` commands, no mocked git, because

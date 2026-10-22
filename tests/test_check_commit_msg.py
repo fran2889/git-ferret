@@ -56,6 +56,7 @@ def test_valid_subjects_pass(subject: str) -> None:
         "chore: bumping the version",
         "ci: ran the suite",
         "feat: ",
+        "feat:  ",
     ],
 )
 def test_invalid_subjects_are_rejected(subject: str) -> None:
@@ -71,6 +72,7 @@ def test_invalid_subjects_are_rejected(subject: str) -> None:
         "fixup! feat: add a thing",
         "squash! fix: repair the parser",
         "amend! docs: rewrite the guide",
+        "Squashed commit of the following:",
     ],
 )
 def test_git_generated_subjects_pass_through(subject: str) -> None:
@@ -80,6 +82,15 @@ def test_git_generated_subjects_pass_through(subject: str) -> None:
 def test_subject_skips_blank_and_comment_lines() -> None:
     text = "\n# a comment\n\nfeat: add --version\n\n# Please enter the commit message\n"
     assert subject_of(text) == "feat: add --version"
+
+
+def test_subject_skips_a_configured_comment_char() -> None:
+    text = "; a comment\n\nfeat: add --version\n"
+    assert subject_of(text, comment_char=";") == "feat: add --version"
+
+
+def test_subject_with_an_empty_comment_char_reads_the_first_line() -> None:
+    assert subject_of("feat: add --version\n", comment_char="") == "feat: add --version"
 
 
 def test_subject_of_an_empty_message_is_none() -> None:
@@ -98,6 +109,14 @@ def test_main_rejects_a_bad_message(tmp_path: Path, capsys: pytest.CaptureFixtur
 
 def test_main_rejects_an_empty_message(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["check_commit_msg", str(_message(tmp_path, "\n# nothing here\n"))]) == 1
+    assert "empty" in capsys.readouterr().err.lower()
+
+
+def test_main_uses_a_configured_comment_char(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _message(tmp_path, "; nothing here\n")
+    assert main(["check_commit_msg", str(path), ";"]) == 1
     assert "empty" in capsys.readouterr().err.lower()
 
 

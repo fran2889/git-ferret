@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Fran
+# SPDX-License-Identifier: GPL-3.0-only
 # Shared helpers for the checked-in git hooks.
 #
 # Setting core.hooksPath for a repository hides the hooks a person configured
@@ -36,7 +38,7 @@ run_global_hook() {
         "~"*) global_path="${HOME}${global_path#\~}" ;;
     esac
     case "$global_path" in
-        /*) ;;
+        /* | [A-Za-z]:/* | [A-Za-z]:\\*) ;;
         *) global_path="$repo_root/$global_path" ;;
     esac
 
