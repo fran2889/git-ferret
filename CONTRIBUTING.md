@@ -130,15 +130,16 @@ on every commit, so its edge cases are worth covering.
 
 ## Documentation
 
-Update `README.md` when user-facing behaviour changes. The README is the user manual. Do not
-restate the `Makefile` targets or the `pyproject.toml` configuration in prose; point at them
-instead.
+Update `README.md` when user-facing behaviour changes. The README is the user manual, and release
+steps are in the [releasing runbook](docs/releasing.md). Do not restate the `Makefile` targets or
+the `pyproject.toml` configuration in prose; point at them instead.
 
 ## CI
 
 The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cross-platform test
 job, coverage, build, and audit. Dependency review is a separate check and is meant to be required
-in the repository ruleset as well. release-please is the only release path; do not hand-edit
+in the repository ruleset as well. Release automation is described in the
+[releasing runbook](docs/releasing.md); release-please is the only release path, so do not hand-edit
 versions or tags.
 
 The compatibility canary runs the suite weekly on the newest stable Python and the newest git. It is
