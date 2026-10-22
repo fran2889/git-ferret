@@ -84,11 +84,22 @@ jobs:
 
             - name: Build artifacts
               if: steps.publish.outputs.tag != ''
-              run: python -m build
+              run: uv run --no-sync python -m build
 
             - name: Check artifacts
               if: steps.publish.outputs.tag != ''
-              run: python -m twine check dist/*
+              run: uv run --no-sync python -m twine check dist/*
+
+            # The wheel a user installs has to answer --version, not merely
+            # exist. A clean environment keeps the checkout's editable install
+            # from hiding a packaging mistake.
+            - name: Smoke-test the wheel
+              if: steps.publish.outputs.tag != ''
+              run: |
+                  uv venv .wheel-smoke
+                  uv pip install --python .wheel-smoke/bin/python dist/*.whl
+                  .wheel-smoke/bin/git-ferret --version
+                  .wheel-smoke/bin/git-ferret --help
 
             # --clobber so a half-finished upload from a failed run is replaced
             # rather than colliding with itself.
