@@ -385,8 +385,15 @@ Install the package with the dev tools, then run the checks:
 
 ```console
 $ make install
+$ make hooks
 $ make check
 ```
+
+`make hooks` points this repository at the checked-in `.githooks`. It sets
+`core.hooksPath` locally, so commits and pushes run the project's checks and
+Conventional Commits validation; it does not change your global git
+configuration. A Python file with unstaged changes is refused rather than
+staged whole.
 
 `make check` runs formatting, linting, the SPDX header check, type checking, and the test suite. The individual targets:
 
@@ -400,6 +407,7 @@ $ make check
 | `make coverage` | Run the suite and write HTML and XML coverage reports |
 | `make build` | Build the sdist and wheel in `dist/` |
 | `make audit` | Scan dependencies for known vulnerabilities with `pip-audit` |
+| `make hooks` | Point this repository at the checked-in `.githooks` |
 | `make clean` | Remove build artifacts and caches |
 
 `make ci` runs everything the pipeline runs: the checks above plus `coverage`, `build`, and
