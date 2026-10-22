@@ -12,7 +12,7 @@ help: ## Show this help
 	@echo
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
 
-install: ## Install the package and dev tools (editable, with pip)
+install: ## Install the package and dev tools (editable)
 	$(PYTHON) -m pip install -e ".[$(EXTRAS)]"
 
 hooks: ## Use the checked-in git hooks for this repository only
