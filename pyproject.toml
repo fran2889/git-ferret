@@ -12,6 +12,17 @@ readme = "README.md"
 requires-python = ">=3.14"
 license = "GPL-3.0-only"
 license-files = ["LICENSE"]
+authors = [{ name = "Fran" }]
+keywords = ["git", "repository", "audit", "branches", "cleanup", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Version Control :: Git",
+]
 # 0.27.2 is the floor because it is the first release that exposes its own
 # exception hierarchy (`typer.TyperException`). Below it an unknown flag
 # arrives as an exception from whichever copy of click is in play -- typer
@@ -36,6 +47,12 @@ audit = ["pip-audit>=2.10"]
 
 [project.scripts]
 git-ferret = "git_ferret.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/fran2889/git-ferret"
+Repository = "https://github.com/fran2889/git-ferret"
+Issues = "https://github.com/fran2889/git-ferret/issues"
+Changelog = "https://github.com/fran2889/git-ferret/releases"
 
 [tool.setuptools.packages.find]
 include = ["git_ferret*"]
