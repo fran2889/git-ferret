@@ -89,7 +89,8 @@ uses it.
 - `git-ferret --version`, so the bug template can ask for a version.
 - README gains a `## Troubleshooting` heading, so the contact link resolves.
 - Repository settings: description, topics, homepage, private vulnerability
-  reporting enabled.
+  reporting enabled. If the available token cannot administer the repository,
+  this is tracked as an issue instead.
 - Issues #4 to #9 rewritten into the enhancement template while keeping their
   numbers, intent, and labels.
 
@@ -280,12 +281,14 @@ lint enforce it. git-ferret adopts the same convention:
 
 ## Issue plan
 
-Phase 0 is executed now and is not filed as issues. Every other item gets one
-issue, written in the enhancement template, with the phase in the body and a
-label where one applies.
+Phase 0 is executed now and is not filed as issues, except repository settings
+that need administrator access; that one is filed like any other. Every other
+item gets one issue, written in the enhancement template, with the phase in the
+body and a label where one applies.
 
 | Phase | Issue | Labels |
 |---|---|---|
+| 0 | chore: complete repository metadata and private vulnerability reporting | |
 | 1 | docs: add CONTRIBUTING.md | documentation |
 | 1 | docs: add AGENTS.md for AI agents | documentation |
 | 1 | docs: restructure README and split troubleshooting and development guides | documentation |
