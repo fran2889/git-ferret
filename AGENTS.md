@@ -94,7 +94,8 @@ runs `make typecheck test`, and the pre-commit hook formats and lints staged Pyt
   `.github/PULL_REQUEST_TEMPLATE.md`. Do not invent a second format here.
 - `gh pr create` does not apply the pull request template. Pass a filled copy with `--body-file`.
 - The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cross-platform test
-  job, coverage, build, and audit.
+  job, coverage, build, and audit. Dependency review is a separate check and is meant to be required
+  in the repository ruleset.
 - release-please is the only release path. Do not hand-edit versions, tags, or the release manifest;
   it opens the release pull request and the release workflow publishes the draft.
 - Do not hand-apply Dependabot's automation labels. Dependabot uses the `uv` ecosystem so its pull
