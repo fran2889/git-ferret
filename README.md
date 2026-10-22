@@ -65,8 +65,8 @@ $ uv run git-ferret --help
 ```
 
 `uv sync --locked` installs the runtime dependencies and the package in editable mode, and fails if
-`uv.lock` no longer matches `pyproject.toml`. Add `--all-extras` to install the tools behind
-`make check` as well.
+`uv.lock` no longer matches `pyproject.toml`. Add `--all-extras`, or run `make sync`, to install
+the tools behind `make check` as well.
 
 The pip route works too:
 
@@ -400,13 +400,19 @@ $ diff ~/reports/yesterday.md ~/reports/today.md
 
 ## Development
 
-Install the package with the dev tools, then run the checks:
+Install the package with the dev tools, then run the checks. With uv, one command builds the
+environment from the lockfile:
 
 ```console
-$ make install
+$ make sync
 $ make hooks
-$ make check
+$ make check PYTHON=.venv/bin/python
 ```
+
+`make sync` is `uv sync --all-extras --locked`. The `PYTHON` override points the Makefile at that
+environment without requiring it to be active; once `.venv` is active, plain `make check` finds the
+tools. The pip route still works: run `make install` in place of `make sync`, activate the
+environment, then run `make hooks` and `make check`.
 
 `make hooks` points this repository at the checked-in `.githooks`. It sets
 `core.hooksPath` locally, so commits and pushes run the project's checks and
@@ -427,6 +433,7 @@ staged whole.
 | `make build` | Build the sdist and wheel in `dist/` |
 | `make audit` | Scan dependencies for known vulnerabilities with `pip-audit` |
 | `make hooks` | Point this repository at the checked-in `.githooks` |
+| `make sync` | Install every extra from `uv.lock`, failing if it is stale |
 | `make clean` | Remove build artifacts and caches |
 
 `make ci` runs everything the pipeline runs: the checks above plus `coverage`, `build`, and
