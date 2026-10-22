@@ -19,6 +19,7 @@ from pathlib import Path
 import click
 import typer
 
+from git_ferret import __version__
 from git_ferret.analysis.health import report_remote_health
 from git_ferret.analysis.local import analyse_local
 from git_ferret.analysis.remote import (
@@ -41,6 +42,30 @@ ANALYSES: dict[str, Analysis] = {
     "remote": analyse_remote,
     "merged": analyse_merged_candidates,
 }
+
+
+def _show_version(value: bool) -> None:
+    """Print the version and stop, before typer asks for a subcommand.
+
+    A bug report that cannot name the version it was filed against is worth
+    much less, so this answers without a scan and without a repository.
+    """
+    if value:
+        print(f"git-ferret {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _toplevel(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        callback=_show_version,
+        is_eager=True,
+        help="Show the installed version and exit.",
+    ),
+) -> None:
+    """Audit many local git repositories at once. Reports only."""
 
 
 def _aborts_on_interrupt(func: Callable[..., None]) -> Callable[..., None]:

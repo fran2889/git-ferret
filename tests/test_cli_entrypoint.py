@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from git_ferret import cli
+from git_ferret import __version__, cli
 from git_ferret.config import Config
 from tests.helpers import make_repo
 
@@ -33,6 +33,13 @@ def test_a_successful_run_returns_zero(tmp_path: Path, capsys: pytest.CaptureFix
     make_repo(tmp_path / "r")
     assert _main(["local", str(tmp_path)]) == 0
     assert capsys.readouterr().err == ""
+
+
+def test_version_is_printed_without_running_a_scan(capsys: pytest.CaptureFixture[str]):
+    # The bug report template asks for this, so it has to work without a path
+    # and without touching a repository.
+    assert _main(["--version"]) == 0
+    assert capsys.readouterr().out.strip() == f"git-ferret {__version__}"
 
 
 def test_a_missing_path_is_a_usage_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
