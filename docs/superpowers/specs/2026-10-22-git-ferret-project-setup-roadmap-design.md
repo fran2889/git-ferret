@@ -172,7 +172,9 @@ Translated with Python equivalents:
 
 - `README.md` keeps the user manual: install (including `uv` and `uvx`),
   the three commands, output semantics, configuration, and regular use. It
-  gains a table of contents.
+  gains a table of contents, a flag reference table covering every option of
+  all three commands, and the minimum git version (2.38, for
+  `merge-tree --write-tree`) stated beside the Python floor.
 - `docs/troubleshooting.md` takes the venv-breakage section plus guidance on
   fetch failures, shallow clones, missing base branches, and Windows console
   encoding. The README links to it and keeps a short summary.
@@ -273,6 +275,8 @@ Every source file names its licence in a header, and `make check` enforces it:
 - Guarded by a tag-format check before any upload.
 - README install instructions switch the primary path to
   `uv tool install git-ferret` once it is live; the checkout path stays.
+- The `[project]` metadata is completed first: authors, project URLs,
+  classifiers, and keywords, matching the README.
 - An issue tracks this and stays open until enabled.
 
 ## Issue plan
@@ -295,6 +299,7 @@ body and a label where one applies.
 | 3 | ci: add dependency review as a required check | |
 | 3 | ci: add weekly compatibility canary | |
 | 4 | docs: add releasing runbook | documentation |
+| 4 | build: complete package metadata for an index page | |
 | 4 | ci: publish to PyPI with trusted publishing | enhancement |
 
 Dependencies: the hooks issue depends on the commit-message script, which ships
