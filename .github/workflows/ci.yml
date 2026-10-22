@@ -22,7 +22,7 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: lint
-            - run: uv run --no-sync make format-check lint check-spdx PYTHON=python
+            - run: make format-check lint check-spdx PYTHON=python
 
     type-check:
         runs-on: ubuntu-latest
@@ -32,7 +32,7 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: type
-            - run: uv run --no-sync make typecheck PYTHON=python
+            - run: make typecheck PYTHON=python
 
     test:
         runs-on: ubuntu-latest
@@ -51,7 +51,7 @@ jobs:
               with:
                   python-version: ${{ matrix.python-version }}
                   extras: test
-            - run: uv run --no-sync make test PYTHON=python
+            - run: make test PYTHON=python
 
     coverage:
         runs-on: ubuntu-latest
@@ -61,9 +61,9 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: test
-            - run: uv run --no-sync make coverage PYTHON=python
+            - run: make coverage PYTHON=python
             - name: Summarise coverage in the run summary
-              run: uv run --no-sync python scripts/coverage_summary.py >> "$GITHUB_STEP_SUMMARY"
+              run: python scripts/coverage_summary.py >> "$GITHUB_STEP_SUMMARY"
             - name: Upload coverage results
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
@@ -81,7 +81,7 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: build
-            - run: uv run --no-sync make build PYTHON=python
+            - run: make build PYTHON=python
             - name: Smoke-test the wheel
               run: |
                   uv venv .wheel-smoke
@@ -104,7 +104,7 @@ jobs:
               with:
                   extras: audit
             - name: Audit dependencies
-              run: uv run --no-sync make audit PYTHON=python
+              run: make audit PYTHON=python
 
     merge-gate:
         runs-on: ubuntu-latest
