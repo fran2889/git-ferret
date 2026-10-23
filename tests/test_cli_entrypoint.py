@@ -10,6 +10,7 @@ repository does not cost you the other twenty-nine, and that the tool's own
 usage errors reach the caller as exit 1.
 """
 
+import io
 import subprocess
 import sys
 from pathlib import Path
@@ -183,3 +184,36 @@ def test_one_unreadable_repository_does_not_stop_a_remote_run(
     monkeypatch.setattr(cli, "ANALYSES", {"remote": refuse, "merged": refuse})
     assert _main(["remote", str(tmp_path)]) == 0
     assert "error analysing" in capsys.readouterr().err
+
+
+class _RecordingStream:
+    """A stream that records how the entry point asks it to encode."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def reconfigure(self, **kwargs: str) -> None:
+        self.calls.append(kwargs)
+
+
+def test_the_report_is_written_as_utf8(monkeypatch: pytest.MonkeyPatch):
+    # The markers are emoji and a branch name can be any UTF-8, but a redirected
+    # Windows stream encodes cp1252 and would raise on the first line.
+    out, err = _RecordingStream(), _RecordingStream()
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(sys, "stderr", err)
+
+    cli._configure_output()  # pyright: ignore[reportPrivateUsage]
+
+    assert out.calls == [{"encoding": "utf-8", "errors": "replace"}]
+    assert err.calls == [{"encoding": "utf-8", "errors": "replace"}]
+
+
+def test_a_stream_that_cannot_be_reconfigured_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # StringIO and streams owned by a wrapper have no reconfigure; that is not
+    # a reason to fail the run.
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+    cli._configure_output()  # pyright: ignore[reportPrivateUsage]

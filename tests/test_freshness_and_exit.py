@@ -28,6 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _cli(*args: str) -> subprocess.CompletedProcess[str]:
+    # The CLI writes UTF-8 whatever the console locale; decode it as such.
+    # With the locale default (cp1252 on Windows) the reader thread raises on
+    # the first emoji marker and leaves stdout as None, which looks like the
+    # CLI printing nothing.
     return subprocess.run(
         [sys.executable, "-m", "git_ferret.cli", *args],
         check=False,
@@ -170,6 +174,28 @@ def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path: Path):
 
 
 # --- exit codes ---------------------------------------------------------------
+
+
+def test_cli_writes_utf8_even_when_the_environment_names_a_legacy_encoding(tmp_path: Path):
+    # A redirected Windows stream picks up the console code page, and forcing
+    # cp1252 here reproduces that anywhere. The entry point has to reconfigure
+    # both streams, otherwise the first emoji marker stops the run.
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "git_ferret.cli", "local", str(tmp_path), "--no-fetch"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "⚠️" in result.stdout
 
 
 def test_unknown_command_exits_one():
