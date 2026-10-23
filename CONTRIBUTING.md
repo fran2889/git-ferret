@@ -138,9 +138,9 @@ instead.
 ## CI
 
 The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cross-platform test
-job, coverage, build, and audit. Dependency review is a separate check and is meant to be required
-in the repository ruleset as well. release-please is the only release path; do not hand-edit
-versions or tags.
+job, coverage, build, and audit. Dependency review is a separate check; its `dependency-review`
+context must also be required in the `Protect main` ruleset. release-please is the only release
+path; do not hand-edit versions or tags.
 
 ## Licensing
 
