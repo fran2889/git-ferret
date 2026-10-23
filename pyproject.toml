@@ -15,7 +15,6 @@ license-files = ["LICENSE"]
 authors = [{ name = "Fran" }]
 keywords = ["git", "repository", "audit", "branches", "cleanup", "cli"]
 classifiers = [
-    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",

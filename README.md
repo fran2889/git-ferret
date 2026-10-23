@@ -4,7 +4,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/fran2889/git-ferret)](https://github.com/fran2889/git-ferret/releases)
 [![License: GPLv3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-Audit many local git repositories at once, and find the branches you can delete.
+Read-only reporting tool for auditing many local git repositories.
 
 Keep twenty or thirty repositories in one directory and the state rots quietly: branches pushed
 long ago and forgotten, upstream branches deleted server-side, work abandoned on a branch from four
