@@ -5,7 +5,7 @@
 
 The hooks are shell scripts, so these tests run them in a real repository with
 a real ``git``: the same approach the rest of the suite takes. They skip when
-no bash is available, because a hook cannot run without its interpreter.
+no usable bash is available, because a hook cannot run without its interpreter.
 """
 
 from __future__ import annotations
@@ -26,7 +26,69 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 HOOKS = REPO_ROOT / ".githooks"
 CHECK_COMMIT_MSG = REPO_ROOT / "scripts" / "check_commit_msg.py"
 
-pytestmark = pytest.mark.skipif(shutil.which("bash") is None, reason="the hooks are bash scripts")
+
+def _usable_bash(path: Path) -> bool:
+    """Whether *path* runs a shell that can execute the hooks."""
+    try:
+        result = subprocess.run(
+            [str(path), "-c", "exit 0"], check=False, capture_output=True, timeout=10
+        )
+    except OSError, subprocess.SubprocessError:
+        return False
+    return result.returncode == 0
+
+
+def _find_bash() -> str | None:
+    """A bash that can run the hooks, preferring Git for Windows' own.
+
+    ``shutil.which("bash")`` can find the Windows Subsystem for Linux launcher
+    on a Windows runner before Git's bash, and WSL cannot run a hook whose
+    interpreter is a Windows path. Probe the candidates rather than trusting
+    the first name on PATH.
+    """
+    candidates: list[Path] = []
+    if sys.platform == "win32":
+        git = shutil.which("git")
+        if git is not None:
+            git_path = Path(git).resolve()
+            for root in (git_path.parent.parent, git_path.parent.parent.parent):
+                candidates += [
+                    root / "bin" / "bash.exe",
+                    root / "usr" / "bin" / "bash.exe",
+                ]
+    found = shutil.which("bash")
+    if found is not None:
+        candidates.append(Path(found))
+    for candidate in candidates:
+        if candidate.is_file() and _usable_bash(candidate):
+            return str(candidate)
+    return None
+
+
+BASH = _find_bash()
+pytestmark = pytest.mark.skipif(BASH is None, reason="no usable bash")
+
+
+def _bash() -> str:
+    """The bash used to run the hooks; the module is skipped without one."""
+    assert BASH is not None
+    return BASH
+
+
+def _make_executable(path: Path) -> None:
+    """Mark *path* executable for the bash that runs the hooks.
+
+    ``Path.chmod`` cannot set the execute bit on Windows; Git Bash's own
+    ``chmod`` records it where Git Bash looks for it.
+    """
+    subprocess.run(
+        [_bash(), "-c", 'chmod +x "$1"', "_", path.as_posix()],
+        check=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
 
 
 def _ruff_available() -> bool:
@@ -62,6 +124,8 @@ def _commit(repo: Path, env: dict[str, str], message: str) -> subprocess.Complet
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
     )
 
@@ -133,21 +197,24 @@ def test_pre_push_runs_typecheck_and_tests(tmp_path: Path) -> None:
     fake_make.write_text(
         '#!/usr/bin/env bash\nprintf \'%s\\n\' "$@" > "$MAKE_ARGS"\n',
         encoding="utf-8",
+        newline="\n",
     )
-    fake_make.chmod(0o755)
+    _make_executable(fake_make)
 
     env = os.environ.copy()
-    env["MAKE_ARGS"] = str(args_file)
-    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["MAKE_ARGS"] = args_file.as_posix()
+    env["PATH"] = f"{fake_bin.as_posix()}{os.pathsep}{env['PATH']}"
     env["PYTHON"] = sys.executable
 
     result = subprocess.run(
-        ["bash", str(HOOKS / "pre-push")],
+        [_bash(), str(HOOKS / "pre-push")],
         cwd=repo,
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
     assert result.returncode == 0, result.stderr
@@ -164,8 +231,8 @@ def test_pre_commit_runs_a_configured_global_hook_first(tmp_path: Path) -> None:
     global_hooks.mkdir()
     marker = tmp_path / "global-ran"
     global_hook = global_hooks / "pre-commit"
-    global_hook.write_text('#!/usr/bin/env bash\ntouch "$MARKER"\n', encoding="utf-8")
-    global_hook.chmod(0o755)
+    global_hook.write_text('#!/usr/bin/env bash\ntouch "$MARKER"\n', encoding="utf-8", newline="\n")
+    _make_executable(global_hook)
 
     global_config = tmp_path / "global.gitconfig"
     global_config.write_text("", encoding="utf-8")
@@ -175,20 +242,22 @@ def test_pre_commit_runs_a_configured_global_hook_first(tmp_path: Path) -> None:
         "--file",
         str(global_config),
         "core.hooksPath",
-        str(global_hooks),
+        global_hooks.as_posix(),
         check=True,
     )
     env = os.environ.copy()
     env["GIT_CONFIG_GLOBAL"] = str(global_config)
-    env["MARKER"] = str(marker)
+    env["MARKER"] = marker.as_posix()
 
     result = subprocess.run(
-        ["bash", str(HOOKS / "pre-commit")],
+        [_bash(), str(HOOKS / "pre-commit")],
         cwd=repo,
         env=env,
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
     )
 
     assert result.returncode == 0, result.stderr
