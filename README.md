@@ -17,6 +17,25 @@ itself. You delete; it reports and explains.
 $ git-ferret merged ~/src
 ```
 
+## Contents
+
+- [It will not delete anything](#it-will-not-delete-anything)
+- [Install](#install)
+- [Check your install](#check-your-install)
+- [Troubleshooting](#troubleshooting)
+- [Three questions, three commands](#three-questions-three-commands)
+- [Command reference](#command-reference)
+- [Why it does not trust commit history](#why-it-does-not-trust-commit-history)
+- [Safe to delete means two things](#safe-to-delete-means-two-things)
+- [Stale answers are labelled](#stale-answers-are-labelled)
+- [Fetching](#fetching)
+- [Configuration](#configuration)
+- [Understanding the output](#understanding-the-output)
+- [Using it regularly](#using-it-regularly)
+- [Development](#development)
+- [Documentation](#documentation)
+- [Licence](#licence)
+
 ## It will not delete anything
 
 The only write this tool performs is a fast-forward, and only when you explicitly ask:
@@ -50,7 +69,9 @@ edits, but skipping keeps this tool from moving a working tree that has unsaved 
 
 ## Install
 
-Needs Python 3.14 or newer, and `git` on your `PATH`.
+Needs Python 3.14 or newer, and `git` 2.38 or newer on your `PATH`. The git floor is
+`merge-tree --write-tree`, which the `merged` analysis uses; older git cannot answer the question
+that command exists to ask.
 
 ### From a checkout
 
@@ -146,7 +167,7 @@ its environment in uv's cache instead of in the project, which is useful when yo
 run but nothing written beside it. `uvx --from .` looks like it does the same thing and does not: it
 builds a snapshot of the directory and caches that, so later edits are not picked up.
 
-### Check your install
+## Check your install
 
 ```console
 $ git-ferret --version
@@ -158,38 +179,26 @@ A run over a directory of real repositories should print a report and exit 0.
 
 ## Troubleshooting
 
-Most problems are in the install, not the scan. If a report looks wrong, read the `fetched ...` line
-on the repository first: when a repository was read without a successful fetch, the report says so,
-and a warning appears once at the top of the run.
+Most problems are in the install or the fetch, not the scan. If a report looks wrong, read the
+`fetched ...` line on the repository first: when a repository was read without a successful fetch,
+the report says so, and a warning appears once at the top of the run.
 
-### When the venv breaks
+The common cases:
 
-```console
-$ .venv/bin/git-ferret local ~/src
-zsh: bad interpreter: /home/you/src/git-ferret/.venv/bin/python3.11: no such file or directory
-```
+- **The virtual environment broke.** Every script in `.venv/bin` records the absolute path of the
+  interpreter that created it. Uninstalling or upgrading that Python makes all of them fail, and
+  activating the environment does not help. Rebuild it.
+- **The fetch failed.** The repository is still analysed, marked `[UNREACHABLE]`, and the run is
+  labelled stale. Check the remote and your network, or use `--no-fetch` deliberately.
+- **The clone is shallow.** A shallow clone may not have the merge base locally, so the merge test
+  reports `[UNKNOWN]` rather than inventing a conflict. Fetch the missing history.
+- **There is no base branch.** git-ferret uses `origin/main`, `origin/master`, `main`, or `master`,
+  and does not guess at anything else. A repository with none of them reports `[NO BASE]`.
+- **A Windows console cannot render the report.** The report is UTF-8 and the bracketed marker
+  carries the meaning even when an emoji is replaced.
 
-The environment is intact; its Python is gone. Every script installed into `.venv/bin`
-(`git-ferret`, `pytest`, `pip`) starts with the absolute path of the interpreter that created the
-environment. Once
-that interpreter is uninstalled, upgraded or switched (`pyenv` or `uv` changing versions, a Homebrew
-upgrade, the Python macOS ships changing), all of them fail the same way, and activating the
-environment does not help.
-
-Rebuild it. Nothing in `.venv` is unique: its contents come from `pyproject.toml`, plus anything you
-installed into it by hand, which is worth listing first if you have:
-
-```console
-$ .venv/bin/pip list
-$ rm -rf .venv
-$ python3 -m venv .venv
-$ source .venv/bin/activate
-$ pip install -e .
-```
-
-If the version named in the error is one you no longer want (`python3.11` when you are on
-`python3.14`), then `python3 -m venv .venv` builds the same broken environment again. Check what
-`python3` resolves to with `python3 --version`, or pin the version: `uv venv --python 3.14`.
+The details, including the exact errors and the commands to fix each case, are in
+[docs/troubleshooting.md](docs/troubleshooting.md).
 
 ## Three questions, three commands
 
@@ -250,6 +259,24 @@ fetched 2026-10-16 09:41:05 · base: origin/main
 `[SAFE TO DELETE]` is the answer this command exists to give, in the marker rather than in a line of
 prose you have to read. A branch that is merged but must be kept comes out as
 `[UNSAFE TO DELETE]`, never as `[OK]`.
+
+## Command reference
+
+Every command accepts a directory argument, and all of them default to the current directory.
+
+| Option | Commands | Meaning |
+|---|---|---|
+| `PATH` | `local`, `remote`, `merged` | Directory to scan recursively. Defaults to `.`. |
+| `--no-fetch` | `local`, `remote`, `merged` | Skip `git fetch --all --prune` and read the existing refs. |
+| `--update` | `local` | Fast-forward clean worktrees behind their upstream. The only write path. |
+| `--author SUBSTR` | `remote`, `merged` | Substring of `Name <email>`. Repeatable, or comma-separated. |
+| `--branch SUBSTR` | `remote`, `merged` | Substring of the branch name. |
+| `--help` | every command | Show help and exit 0. |
+| `--version` | top level | Show the installed version and exit 0. Use `git-ferret --version`, not after a subcommand. |
+| `--install-completion`, `--show-completion` | top level | Install or print shell completion for the command. |
+
+`local` does not accept `--author` or `--branch`: they describe remote branches, and local worktree
+state has no equivalent.
 
 ## Why it does not trust commit history
 
@@ -402,59 +429,27 @@ $ diff ~/reports/yesterday.md ~/reports/today.md
 
 ## Development
 
-Install the package with the dev tools, then run the checks. With uv, one command builds the
-environment from the lockfile:
+Install the package with the dev tools, run the checks, and turn on the checked-in hooks:
 
 ```console
-$ make sync
+$ uv sync --all-extras --locked   # or: make install
 $ make hooks
-$ make check PYTHON=.venv/bin/python
+$ make check
 ```
 
-`make sync` is `uv sync --all-extras --locked`. The `PYTHON` override points the Makefile at that
-environment without requiring it to be active; once `.venv` is active, plain `make check` finds the
-tools. The pip route still works: run `make install` in place of `make sync`, activate the
-environment, then run `make hooks` and `make check`.
+`make check` runs formatting, linting, the SPDX header check, type checking, and the test suite.
+`make help` lists every target. The [development guide](docs/development.md) covers the hooks,
+the testing philosophy, and the full list of targets.
 
-`make hooks` points this repository at the checked-in `.githooks`. It sets
-`core.hooksPath` locally, so commits and pushes run the project's checks and
-Conventional Commits validation; it does not change your global git
-configuration. A Python file with unstaged changes is refused rather than
-staged whole.
+CI runs the same checks on Python 3.14 on Linux, macOS, and Windows, plus coverage, a wheel build
+with a CLI smoke test, and a `pip-audit` scan. Releases are cut by release-please from Conventional
+Commits.
 
-`make check` runs formatting, linting, the SPDX header check, type checking, and the test suite. The individual targets:
+## Documentation
 
-| Command | What it does |
-|---|---|
-| `make format` / `make format-check` | Format, or check formatting, with ruff |
-| `make lint` / `make lint-fix` | Lint, or lint and apply safe fixes |
-| `make check-spdx` | Check that every Python source file names its licence |
-| `make typecheck` | Type check with pyright (strict) |
-| `make test` | Run the test suite |
-| `make coverage` | Run the suite and write HTML and XML coverage reports |
-| `make build` | Build the sdist and wheel in `dist/` |
-| `make audit` | Scan dependencies for known vulnerabilities with `pip-audit` |
-| `make hooks` | Point this repository at the checked-in `.githooks` |
-| `make sync` | Install every extra from `uv.lock`, failing if it is stale |
-| `make clean` | Remove build artifacts and caches |
-
-`make ci` runs everything the pipeline runs: the checks above plus `coverage`, `build`, and
-`audit`. It reaches the network, so it is slower than `make check`.
-
-`make audit` runs `pip-audit` twice, because a project path alone only covers the runtime
-dependencies: once over `pyproject.toml`, and once over the installed environment, which in CI
-is the `audit` extra's toolchain as well.
-
-`make help` lists everything. Every target runs `python -m ...`, so `PYTHON` selects the
-interpreter: `make check PYTHON=.venv/bin/python` when the environment is not active.
-
-CI runs the same targets on every push and pull request: formatting and linting, the SPDX header
-check, pyright, the test suite on Python 3.14, coverage, a wheel build with a CLI smoke test, and a
-`pip-audit` scan.
-Releases are cut by release-please from Conventional Commits.
-
-The test suite builds real git repositories and runs real `git` commands, no mocked git, because
-the behaviour worth protecting here is git's own.
+- [Troubleshooting](docs/troubleshooting.md): install, fetch, shallow-clone, and console problems.
+- [Development](docs/development.md): the local workflow, Make targets, hooks, and tests.
+- [Documentation index](docs/README.md): all project documents, including the design notes.
 
 ## Licence
 
