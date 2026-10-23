@@ -33,7 +33,6 @@ $ git-ferret merged ~/src
 - [Understanding the output](#understanding-the-output)
 - [Using it regularly](#using-it-regularly)
 - [Development](#development)
-- [Documentation](#documentation)
 - [Licence](#licence)
 
 ## It will not delete anything
@@ -183,22 +182,22 @@ Most problems are in the install or the fetch, not the scan. If a report looks w
 `fetched ...` line on the repository first: when a repository was read without a successful fetch,
 the report says so, and a warning appears once at the top of the run.
 
-The common cases:
-
 - **The virtual environment broke.** Every script in `.venv/bin` records the absolute path of the
   interpreter that created it. Uninstalling or upgrading that Python makes all of them fail, and
-  activating the environment does not help. Rebuild it.
+  activating the environment does not help. Rebuild it with `rm -rf .venv && uv sync --locked`, or
+  with the pip commands under [Install](#install).
 - **The fetch failed.** The repository is still analysed, marked `[UNREACHABLE]`, and the run is
-  labelled stale. Check the remote and your network, or use `--no-fetch` deliberately.
+  labelled stale. Check `git -C <repo> remote -v` and retry with
+  `git -C <repo> fetch --all --prune`, or use `--no-fetch` deliberately.
 - **The clone is shallow.** A shallow clone may not have the merge base locally, so the merge test
-  reports `[UNKNOWN]` rather than inventing a conflict. Fetch the missing history.
+  reports `[UNKNOWN]` rather than inventing a conflict. Deepen it with
+  `git -C <repo> fetch --unshallow`.
 - **There is no base branch.** git-ferret uses `origin/main`, `origin/master`, `main`, or `master`,
-  and does not guess at anything else. A repository with none of them reports `[NO BASE]`.
+  and does not guess at anything else. A repository with none of them reports `[NO BASE]`; create
+  the branch, or the remote ref it should compare against.
 - **A Windows console cannot render the report.** The report is UTF-8 and the bracketed marker
-  carries the meaning even when an emoji is replaced.
-
-The details, including the exact errors and the commands to fix each case, are in
-[docs/troubleshooting.md](docs/troubleshooting.md).
+  carries the meaning even when an emoji is replaced. Windows Terminal handles it; in a legacy
+  console, `chcp 65001` switches the code page.
 
 ## Three questions, three commands
 
@@ -429,27 +428,12 @@ $ diff ~/reports/yesterday.md ~/reports/today.md
 
 ## Development
 
-Install the package with the dev tools, run the checks, and turn on the checked-in hooks:
-
-```console
-$ uv sync --all-extras --locked   # or: make install
-$ make hooks
-$ make check
-```
-
-`make check` runs formatting, linting, the SPDX header check, type checking, and the test suite.
-`make help` lists every target. The [development guide](docs/development.md) covers the hooks,
-the testing philosophy, and the full list of targets.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup with the development extras, the Make targets, the
+checked-in git hooks, the testing philosophy, and the pull request process.
 
 CI runs the same checks on Python 3.14 on Linux, macOS, and Windows, plus coverage, a wheel build
 with a CLI smoke test, and a `pip-audit` scan. Releases are cut by release-please from Conventional
 Commits.
-
-## Documentation
-
-- [Troubleshooting](docs/troubleshooting.md): install, fetch, shallow-clone, and console problems.
-- [Development](docs/development.md): the local workflow, Make targets, hooks, and tests.
-- [Documentation index](docs/README.md): all project documents, including the design notes.
 
 ## Licence
 
