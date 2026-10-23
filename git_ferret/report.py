@@ -18,9 +18,10 @@ repository from the next.
 
 from __future__ import annotations
 
+import io
 import sys
 from pathlib import Path
-from typing import TextIO
+from typing import IO, TextIO, cast
 
 from git_ferret.models import Finding, RepoReport
 
@@ -190,6 +191,35 @@ def _encodable(text: str, out: TextIO) -> str:
     return text
 
 
+class _EncodableStream(io.TextIOBase):
+    """A write-only view of *stream* that cannot raise ``UnicodeEncodeError``.
+
+    Rich adds its own bullet characters after the report text is built, so
+    sanitising the text alone is not enough: every write passes through
+    :func:`_encodable`, including the decoration rich contributes.
+    """
+
+    # ``TextIOBase.encoding`` is read-only and ``None`` on the runtime base,
+    # so the wrapped stream's encoding is copied onto the instance.
+    encoding: str = "utf-8"
+
+    def __init__(self, stream: TextIO) -> None:
+        self._stream = stream
+        self.encoding = getattr(stream, "encoding", None) or "utf-8"
+
+    def write(self, text: str) -> int:
+        return self._stream.write(_encodable(text, self._stream))
+
+    def flush(self) -> None:
+        self._stream.flush()
+
+    def isatty(self) -> bool:
+        return self._stream.isatty()
+
+    def fileno(self) -> int:
+        return self._stream.fileno()
+
+
 def emit(text: str, stream: TextIO | None = None) -> None:
     """Write *text*, richly only when the destination is a terminal.
 
@@ -203,7 +233,9 @@ def emit(text: str, stream: TextIO | None = None) -> None:
     from rich.console import Console
     from rich.markdown import Markdown
 
-    console = Console(file=out, force_terminal=True)
+    # ``TextIOBase`` is not nominally an ``IO[str]`` in typeshed; the proxy
+    # implements the writes rich performs and nothing else.
+    console = Console(file=cast(IO[str], _EncodableStream(out)), force_terminal=True)
     title, body = _split_heading(text)
     if title:
         console.print(Markdown(title))

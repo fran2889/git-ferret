@@ -72,7 +72,7 @@ class Config:
         config_path = path if path is not None else DEFAULT_CONFIG_PATH
         if not config_path.exists():
             return cls()
-        data = tomllib.loads(config_path.read_text())
+        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
         raw_author = data.get("author", [])
         author = split_identities([raw_author] if isinstance(raw_author, str) else list(raw_author))
         whitelist = list(data.get("whitelist", {}).get("patterns", []))
