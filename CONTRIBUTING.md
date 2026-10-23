@@ -1,7 +1,8 @@
 # Contributing to git-ferret
 
 Thanks for taking the time to improve the tool. This guide covers the local workflow, the checks,
-and what a pull request needs.
+and what a pull request needs. If you are an AI agent, read [`AGENTS.md`](AGENTS.md) first: it is the
+agent-facing counterpart to this guide, and this file is authoritative if the two disagree.
 
 ## Development setup
 
