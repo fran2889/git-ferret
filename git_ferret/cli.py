@@ -38,7 +38,7 @@ from git_ferret.report import display_path, emit, render_header, render_repo
 
 app = typer.Typer(help="Audit many local git repositories at once. Reports only.")
 
-Analysis = Callable[[Path, Config, str | None, list[str], str | None], RepoReport]
+Analysis = Callable[[Path, Config, str | None, list[str], str | list[str] | None], RepoReport]
 
 ANALYSES: dict[str, Analysis] = {
     "local": lambda repo, cfg, base, ids, bfilter: analyse_local(repo, cfg, base),
@@ -141,7 +141,9 @@ def remote(
     author: list[str] = typer.Option(
         [], "--author", help="Substring of 'Name <email>'. Repeatable, or comma-separated."
     ),
-    branch: str | None = typer.Option(None, "--branch", help="Substring of the branch name."),
+    branch: list[str] = typer.Option(
+        [], "--branch", help="Substring of the branch name. Repeatable, or comma-separated."
+    ),
 ) -> None:
     """Remote branches matching the filters."""
     _run(ANALYSES["remote"], path, no_fetch, author, branch)
@@ -155,7 +157,9 @@ def merged(
     author: list[str] = typer.Option(
         [], "--author", help="Substring of 'Name <email>'. Repeatable, or comma-separated."
     ),
-    branch: str | None = typer.Option(None, "--branch", help="Substring of the branch name."),
+    branch: list[str] = typer.Option(
+        [], "--branch", help="Substring of the branch name. Repeatable, or comma-separated."
+    ),
 ) -> None:
     """Remote branches whose changes are already in the base branch."""
     _run(ANALYSES["merged"], path, no_fetch, author, branch)
@@ -252,7 +256,7 @@ def _run(
     path: Path,
     no_fetch: bool,
     author: list[str] | None,
-    branch_filter: str | None,
+    branch_filter: str | list[str] | None,
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
@@ -284,7 +288,7 @@ def run_command(
     path: Path,
     no_fetch: bool,
     author: list[str] | None = None,
-    branch_filter: str | None = None,
+    branch_filter: str | list[str] | None = None,
 ) -> None:
     """Run one named subcommand's analysis over *path*."""
     _run(ANALYSES[command], path, no_fetch, author or [], branch_filter)

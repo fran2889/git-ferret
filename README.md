@@ -243,6 +243,16 @@ $ git-ferret remote ~/src --author you@example.com
 $ git-ferret remote ~/src --branch ABC-123
 ```
 
+For `remote` and `merged`, repeat `--branch` or separate patterns with commas:
+
+```console
+$ git-ferret remote ~/src --branch ABC-123 --branch DEF-456
+$ git-ferret merged ~/src --branch "ABC-123,DEF-456"
+```
+
+A branch matches any pattern, and the author filter still applies. Blank patterns are ignored;
+if all patterns are blank, no branch-name filter is applied.
+
 ### `merged`: which remote branches are already in main?
 
 Remote branches whose changes are fully present in the base branch, marked as deletion candidates or
@@ -276,7 +286,7 @@ Every command accepts a directory argument, and all of them default to the curre
 | `--no-fetch` | `local`, `remote`, `merged` | Skip `git fetch --all --prune` and read the existing refs. |
 | `--update` | `local` | Fast-forward clean worktrees behind their upstream. The only write path. |
 | `--author SUBSTR` | `remote`, `merged` | Substring of `Name <email>`. Repeatable, or comma-separated. |
-| `--branch SUBSTR` | `remote`, `merged` | Substring of the branch name. |
+| `--branch SUBSTR` | `remote`, `merged` | Substring of the branch name. Repeatable, or comma-separated. |
 | `--help` | every command | Show help and exit 0. |
 | `--version` | top level | Show the installed version and exit 0. Use `git-ferret --version`, not after a subcommand. |
 | `--install-completion`, `--show-completion` | top level | Install or print shell completion for the command. |
