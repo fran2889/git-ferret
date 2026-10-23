@@ -5,6 +5,10 @@ output semantics, configuration, and regular use. These documents go deeper.
 
 ## Guides
 
+- [Contributing](../CONTRIBUTING.md): development setup, branches, commits, and the pull request
+  process.
+- [AGENTS.md](../AGENTS.md): the same contract for AI agents, with the hard constraints and testing
+  rules.
 - [Troubleshooting](troubleshooting.md): a broken venv, fetch failures, shallow clones, missing base
   branches, and Windows console encoding.
 - [Development](development.md): the local workflow, Make targets, git hooks, testing philosophy,

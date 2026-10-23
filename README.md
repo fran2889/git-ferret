@@ -439,7 +439,8 @@ $ make check
 
 `make check` runs formatting, linting, the SPDX header check, type checking, and the test suite.
 `make help` lists every target. The [development guide](docs/development.md) covers the hooks,
-the testing philosophy, and the full list of targets.
+the testing philosophy, and the full list of targets. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+before opening your first pull request.
 
 CI runs the same checks on Python 3.14 on Linux, macOS, and Windows, plus coverage, a wheel build
 with a CLI smoke test, and a `pip-audit` scan. Releases are cut by release-please from Conventional
@@ -447,6 +448,8 @@ Commits.
 
 ## Documentation
 
+- [Contributing](CONTRIBUTING.md): setup, pull requests, and the commit conventions.
+- [AGENTS.md](AGENTS.md): the same contract for AI agents working in this repository.
 - [Troubleshooting](docs/troubleshooting.md): install, fetch, shallow-clone, and console problems.
 - [Development](docs/development.md): the local workflow, Make targets, hooks, and tests.
 - [Documentation index](docs/README.md): all project documents, including the design notes.

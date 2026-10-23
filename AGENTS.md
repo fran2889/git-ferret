@@ -1,6 +1,7 @@
 # AGENTS.md
 
-Instructions for AI agents working in this repository. Read this before changing code.
+Instructions for AI agents working in this repository. Read this before changing code. The
+[contributing guide](CONTRIBUTING.md) is the human-facing version of the same contract.
 
 ## What this project is
 
