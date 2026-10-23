@@ -37,6 +37,7 @@ ALLOWED_TYPES = frozenset(
 PASSTHROUGH_PREFIXES = (
     "Merge ",
     'Revert "',
+    "Squashed commit of the following:",
     "fixup! ",
     "squash! ",
     "amend! ",
@@ -104,16 +105,17 @@ NON_IMPERATIVE = frozenset(
 )
 
 
-def subject_of(text: str) -> str | None:
+def subject_of(text: str, comment_char: str = "#") -> str | None:
     """The first real line of a commit message, or ``None`` when there is none.
 
     Git's editor buffer carries comments after the subject; a hook that read
     the first line blindly would check ``# Please enter ...`` on a message
-    whose subject had been deleted.
+    whose subject had been deleted. *comment_char* is the character Git is
+    configured to use for those comments.
     """
     for line in text.splitlines():
         stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
+        if not stripped or (comment_char and stripped.startswith(comment_char)):
             continue
         return stripped
     return None
@@ -149,7 +151,10 @@ def validate(subject: str) -> str | None:
 
 def main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: check_commit_msg.py COMMIT_MSG_FILE", file=sys.stderr)
+        print(
+            "usage: check_commit_msg.py COMMIT_MSG_FILE [COMMENT_CHAR]",
+            file=sys.stderr,
+        )
         return 1
 
     path = Path(argv[1])
@@ -157,7 +162,11 @@ def main(argv: list[str]) -> int:
         print(f"check_commit_msg: {path} does not exist", file=sys.stderr)
         return 1
 
-    subject = subject_of(path.read_text(encoding="utf-8", errors="replace"))
+    comment_char = argv[2] if len(argv) > 2 and argv[2] not in ("", "auto") else "#"
+    subject = subject_of(
+        path.read_text(encoding="utf-8", errors="replace"),
+        comment_char=comment_char,
+    )
     if subject is None:
         print("check_commit_msg: the commit message is empty", file=sys.stderr)
         return 1

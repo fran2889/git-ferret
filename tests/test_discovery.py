@@ -111,12 +111,25 @@ def test_a_relative_gitdir_is_resolved_against_the_repository(tmp_path: Path):
 
 
 def test_a_directory_named_modules_outside_git_is_not_a_submodule(tmp_path: Path):
-    # The check is the `.git/modules` path component, not the word "modules"
-    # appearing anywhere, and it has to work with Windows separators too.
-    plain = tmp_path / "modules" / "plain"
+    # The check is the `.git/modules` path component, not the substring
+    # ".git/modules/" appearing anywhere. A directory called `foo.git` is not
+    # a git directory, so its `modules` child is not a submodule's gitdir.
+    plain = tmp_path / "foo.git" / "modules" / "plain"
     plain.mkdir(parents=True)
-    (plain / ".git").write_text(f"gitdir: {tmp_path / 'modules' / 'somewhere'}\n")
+    (plain / ".git").write_text(f"gitdir: {tmp_path / 'foo.git' / 'modules' / 'somewhere'}\n")
     assert is_submodule(plain) is False
+
+
+def test_a_non_ascii_gitdir_pointer_is_read_as_utf8(tmp_path: Path):
+    # git writes the `.git` file as UTF-8. Reading it in the Windows console
+    # code page raises on some characters -- the 0x81 byte in "Á" is undefined
+    # in cp1252 -- which would turn a real submodule into a normal repository.
+    target = tmp_path / ".git" / "modules" / "Á"
+    target.mkdir(parents=True)
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (sub / ".git").write_text(f"gitdir: {target}\n", encoding="utf-8")
+    assert is_submodule(sub) is True
 
 
 def test_identity_is_none_for_a_directory_that_is_not_a_repository(tmp_path: Path):
@@ -134,6 +147,17 @@ def test_identity_of_a_relative_gitdir_pointer_is_absolute(tmp_path: Path):
     linked.mkdir()
     (linked / ".git").write_text("gitdir: ../r/.git/worktrees/linked\n")
     assert repository_identity(linked) == str((repo / ".git").resolve())
+
+
+def test_a_non_ascii_gitdir_pointer_has_a_utf8_identity(tmp_path: Path):
+    # The same locale trap as is_submodule: a Windows console code page read
+    # would raise on the 0x81 byte in "Á" and lose the worktree identity.
+    target = tmp_path / "elsewhere" / "Á"
+    target.mkdir(parents=True)
+    linked = tmp_path / "linked"
+    linked.mkdir()
+    (linked / ".git").write_text(f"gitdir: {target}\n", encoding="utf-8")
+    assert repository_identity(linked) == str(target)
 
 
 def test_identity_of_a_bare_gitdir_pointer_is_the_target(tmp_path: Path):

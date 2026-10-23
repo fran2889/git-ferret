@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Fran
+# SPDX-License-Identifier: GPL-3.0-only
 # Check the subject against the project's Conventional Commits rules.
 
 set -euo pipefail
@@ -7,4 +9,8 @@ source "$(dirname "$0")/common.sh"
 run_global_hook commit-msg "$@"
 
 python=$(python_bin)
-exec "$python" scripts/check_commit_msg.py "$1"
+comment_char=$(git config --get core.commentChar 2>/dev/null || true)
+case "$comment_char" in
+    "" | auto) comment_char="#" ;;
+esac
+exec "$python" scripts/check_commit_msg.py "$1" "$comment_char"

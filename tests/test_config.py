@@ -125,6 +125,14 @@ def test_load_accepts_bare_string_author(tmp_path: Path):
     assert Config.load(path).author == ["solo@x.com"]
 
 
+def test_load_reads_the_file_as_utf8_regardless_of_locale(tmp_path: Path):
+    # Windows opens text files in the console code page by default, so a UTF-8
+    # config would load a mojibake author and never match the real commits.
+    path = tmp_path / "c.toml"
+    path.write_text('author = "José <jose@example.com>"\n', encoding="utf-8")
+    assert Config.load(path).author == ["José <jose@example.com>"]
+
+
 def test_load_missing_file_is_empty_not_an_error(tmp_path: Path):
     c = Config.load(tmp_path / "absent.toml")
     assert c.author == [] and c.whitelist == []

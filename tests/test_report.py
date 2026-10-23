@@ -323,10 +323,22 @@ def test_a_failed_fetch_with_a_timestamp_names_the_state_it_read():
     assert "fetch failed; analysed from state as of 2026-10-16 09:41:02" in out
 
 
-class _AsciiStream(io.StringIO):
-    """A non-TTY stream whose encoding cannot represent the decorative glyphs."""
+def _strict_stream(encoding: str) -> tuple[io.TextIOWrapper, io.BytesIO]:
+    """A stream that enforces *encoding* on write, as a real stdout does."""
+    raw = io.BytesIO()
+    return io.TextIOWrapper(raw, encoding=encoding, errors="strict", newline=""), raw
 
-    encoding = "ascii"
+
+class _StrictTerminal(io.TextIOWrapper):
+    """A strict stream that claims to be a terminal, so ``emit`` uses rich."""
+
+    def isatty(self) -> bool:
+        return True
+
+
+def _terminal(encoding: str) -> tuple[_StrictTerminal, io.BytesIO]:
+    raw = io.BytesIO()
+    return _StrictTerminal(raw, encoding=encoding, errors="strict", newline=""), raw
 
 
 def test_emit_survives_a_stream_that_cannot_encode_emoji():
@@ -335,16 +347,36 @@ def test_emit_survives_a_stream_that_cannot_encode_emoji():
     # meaning; the emoji is decoration.
     rep = _repo()
     rep.findings.append(Finding(branch="feat/x", status=Status.NOT_PUSHED))
-    stream = _AsciiStream()
+    stream, raw = _strict_stream("ascii")
 
     emit(render_repo(rep), stream)
+    stream.flush()
 
-    output = stream.getvalue()
+    output = raw.getvalue().decode("ascii")
     assert "`feat/x` [NOT PUSHED]" in output
     assert "## /tmp/api" in output
+    assert "⬆" not in output
+
+
+def test_emit_survives_a_terminal_that_cannot_encode_emoji():
+    # rich adds bullet glyphs of its own, so the TTY path needs the same guard
+    # as a redirected stream rather than only sanitising the report text.
+    rep = _repo()
+    rep.findings.append(Finding(branch="feat/x", status=Status.NOT_PUSHED))
+    stream, raw = _terminal("ascii")
+
+    emit(render_repo(rep), stream)
+    stream.flush()
+
+    output = re.sub(r"\x1b\[[0-9;]*m", "", raw.getvalue().decode("ascii"))
+    assert "feat/x [NOT PUSHED]" in output
+    assert "/tmp/api" in output
+    assert "⬆" not in output
 
 
 def test_emit_leaves_utf8_output_untouched():
-    buffer = io.StringIO()
-    emit("⬆️ `b` [NOT PUSHED]\n", buffer)
-    assert buffer.getvalue() == "⬆️ `b` [NOT PUSHED]\n"
+    stream, raw = _strict_stream("utf-8")
+    text = "⬆️ `b` [NOT PUSHED]\n"
+    emit(text, stream)
+    stream.flush()
+    assert raw.getvalue() == text.encode()

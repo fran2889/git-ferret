@@ -33,7 +33,7 @@ def is_submodule(path: Path) -> bool:
     if not dot_git.is_file():
         return False
     try:
-        content = dot_git.read_text().strip()
+        content = dot_git.read_text(encoding="utf-8").strip()
     except OSError:
         return False
     if not content.startswith("gitdir:"):
@@ -63,7 +63,7 @@ def _gitdir_target(path: Path) -> Path | None:
     if not dot_git.is_file():
         return None
     try:
-        content = dot_git.read_text().strip()
+        content = dot_git.read_text(encoding="utf-8").strip()
     except OSError:
         return None
     if not content.startswith("gitdir:"):
