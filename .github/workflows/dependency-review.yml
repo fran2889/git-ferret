@@ -6,7 +6,6 @@ on:
 
 permissions:
     contents: read
-    pull-requests: write
 
 jobs:
     dependency-review:
@@ -14,6 +13,10 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  # The action authenticates through GitHub's API, not the
+                  # checkout. Leave no token in the worktree for it to read.
+                  persist-credentials: false
             - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
               with:
                   # A moderate finding is worth stopping for: this package

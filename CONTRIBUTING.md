@@ -1,7 +1,8 @@
 # Contributing to git-ferret
 
 Thanks for taking the time to improve the tool. This guide covers the local workflow, the checks,
-and what a pull request needs.
+and what a pull request needs. If you are an AI agent, read [`AGENTS.md`](AGENTS.md) first: it is the
+agent-facing counterpart to this guide, and this file is authoritative if the two disagree.
 
 ## Development setup
 
@@ -137,9 +138,9 @@ instead.
 ## CI
 
 The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cross-platform test
-job, coverage, build, and audit. Dependency review is a separate check and is meant to be required
-in the repository ruleset as well. release-please is the only release path; do not hand-edit
-versions or tags.
+job, coverage, build, and audit. Dependency review is a separate check; its `dependency-review`
+context must also be required in the `Protect main` ruleset. release-please is the only release
+path; do not hand-edit versions or tags.
 
 The compatibility canary runs the suite weekly on the newest stable Python and the newest git. It is
 not a merge gate and never runs on a pull request; a failure opens or updates a single issue with

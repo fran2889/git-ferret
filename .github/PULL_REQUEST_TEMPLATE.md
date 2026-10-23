@@ -14,8 +14,8 @@ How to use this template
 - Replace the "Manual:" line with the commands this PR needs, or delete it.
   Never leave a generic "manual testing" placeholder.
 - `make audit` must pass. Fix the dependency rather than lowering the level.
-- Dependency review is a separate required check. It fails a pull request that
-  adds a dependency with a known vulnerability at moderate severity or higher.
+- Dependency review runs on every pull request and fails one that adds a
+  dependency with a known vulnerability at moderate severity or higher.
 
 Use `Resolves #123` or `Resolves #123, #456` for closing links. If no related
 issue exists, omit the line and say what the PR implements in Summary.

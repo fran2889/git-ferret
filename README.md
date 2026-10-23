@@ -440,8 +440,8 @@ checked-in git hooks, the testing philosophy, and the pull request process.
 
 CI runs the test suite on Python 3.14 on Linux, macOS, and Windows. The remaining checks run on
 Linux: formatting, linting, the SPDX header check, pyright, coverage, a wheel build with a CLI
-smoke test, a dependency review, and a `pip-audit` scan. Releases are cut by release-please from
-Conventional Commits.
+smoke test, a dependency review on pull requests, and a `pip-audit` scan. Releases are cut by
+release-please from Conventional Commits.
 
 ## Licence
 
