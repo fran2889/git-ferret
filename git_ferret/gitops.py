@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from git_ferret.gitcmd import run_git, run_git_text
+from git_ferret.gitcmd import GitError, run_git, run_git_text
 from git_ferret.models import BranchInfo
 
 # Tried in order. The remote-tracking ref wins because `merged` recommends
@@ -29,8 +29,15 @@ def fetch_all(repo: Path) -> tuple[bool, datetime | None]:
     across every configured remote; fetching only ``origin`` would leave the
     others permanently stale while the tool reported confident verdicts about
     them. Returns ``(success, time_of_last_successful_fetch)``.
+
+    A git that cannot be run at all is a failed fetch like any other: the run
+    carries on and the repository is reported as stale rather than the whole
+    scan dying on one unreachable binary.
     """
-    proc = run_git(repo, "fetch", "--all", "--prune")
+    try:
+        proc = run_git(repo, "fetch", "--all", "--prune")
+    except GitError:
+        return False, None
     if proc.returncode != 0:
         return False, None
     return True, fetch_head_mtime(repo)

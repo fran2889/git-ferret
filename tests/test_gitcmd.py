@@ -34,6 +34,31 @@ def test_run_git_check_false_does_not_raise(tmp_path: Path):
     assert proc.returncode != 0
 
 
+def test_a_missing_git_binary_is_a_git_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # Not installed is the obvious case, and it must arrive as the same error
+    # type as any other git failure rather than as a FileNotFoundError that
+    # callers do not know to expect.
+    def missing(*args: object, **kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory", "git")
+
+    monkeypatch.setattr("git_ferret.gitcmd.subprocess.run", missing)
+    with pytest.raises(GitError) as exc:
+        run_git(tmp_path, "status")
+    assert "git status failed" in str(exc.value)
+
+
+def test_a_git_timeout_is_a_git_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # A slow fetch is exactly the long operation, so the 120s timeout is
+    # reachable; it has to be a reported failure, not a traceback.
+    def timed_out(*args: object, **kwargs: object) -> None:
+        raise subprocess.TimeoutExpired(cmd="git", timeout=1)
+
+    monkeypatch.setattr("git_ferret.gitcmd.subprocess.run", timed_out)
+    with pytest.raises(GitError) as exc:
+        run_git(tmp_path, "fetch")
+    assert "timed out" in str(exc.value)
+
+
 def test_run_git_decodes_utf8_under_an_ascii_locale(tmp_path: Path):
     # Windows uses the console code page for subprocess text unless told
     # otherwise, and a UTF-8 branch name then raises UnicodeDecodeError. Run

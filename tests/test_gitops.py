@@ -5,6 +5,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from git_ferret.gitcmd import GitError
 from git_ferret.gitops import (
     base_ref_is_remote,
     fetch_all,
@@ -79,6 +82,16 @@ def test_fetch_failure_is_not_fatal(tmp_path: Path):
     run(repo, "remote", "add", "origin", "/nonexistent/path.git")
     ok, when = fetch_all(repo)
     assert ok is False and when is None
+
+
+def test_fetch_all_survives_a_git_that_cannot_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # The docstring promises this never raises. A missing binary used to leak
+    # out of run_git and take the whole run down before the first line printed.
+    def broken(*args: object, **kwargs: object) -> None:
+        raise GitError(["fetch"], 127, "git: not found")
+
+    monkeypatch.setattr("git_ferret.gitops.run_git", broken)
+    assert fetch_all(tmp_path) == (False, None)
 
 
 def test_fetch_success_records_fetch_head_mtime(tmp_path: Path):
