@@ -123,26 +123,28 @@ def render_repo(report: RepoReport, root: Path | None = None) -> str:
     return _block(lines)
 
 
-def render_header(stale_count: int, total: int) -> str:
-    """The document title, plus the staleness warning when one is warranted.
+def render_header() -> str:
+    """The document title, as a block separated from the first repository."""
+    return _block(["# git-ferret"])
 
-    The warning appears exactly once at the top, and fires when *any*
-    repository was read from stale local state: one stale repo among thirty is
-    exactly the case worth mentioning, and a warning that only fired when every
-    repo was stale would miss it.
 
-    *total* is a parameter rather than derived from a report list so a
-    streaming caller, which holds one repository at a time, can still say how
-    many the warning is about.
+def render_footer(stale_count: int, total: int) -> str:
+    """The stale-state warning, printed once after the report.
+
+    It sits at the end rather than the top because repositories are fetched one
+    at a time as their analysis starts: the count is not knowable until the last
+    one has been read, and printing it early would mean delaying every result
+    behind every fetch. Each repository's heading still carries its own
+    timestamp, so the detail is available without reaching the footer.
     """
-    lines = ["# git-ferret"]
-    if stale_count:
-        lines += [
-            "",
+    if not stale_count:
+        return ""
+    return _block(
+        [
             f"> {WARNING_EMOJI}  {stale_count} of {total} repositories "
             f"analysed from stale local state (no successful fetch this run)",
         ]
-    return _block(lines)
+    )
 
 
 def render_report(reports: list[RepoReport], stale_count: int, root: Path | None = None) -> str:
@@ -153,7 +155,7 @@ def render_report(reports: list[RepoReport], stale_count: int, root: Path | None
     newline rather than with a separator.
     """
     body = "".join(render_repo(report, root) for report in reports)
-    return (render_header(stale_count, len(reports)) + body).rstrip() + "\n"
+    return (render_header() + body + render_footer(stale_count, len(reports))).rstrip() + "\n"
 
 
 def _split_heading(text: str) -> tuple[str, str]:
