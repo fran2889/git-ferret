@@ -36,17 +36,32 @@ wrong, merge a fix and cut the next patch release. If the draft was never publis
 reuse the version, delete the draft and the tag, then let release-please recreate the release pull
 request; do this only while the tag is unpublished.
 
-## Publishing to PyPI
+## What is deliberately still manual
 
-Publishing is not automated yet. The release workflow leaves the artifacts on the GitHub release;
-putting them on an index is a separate decision, tracked in
-[issue #22](https://github.com/fran2889/git-ferret/issues/22). Until that is enabled, install from a
-checkout or from git as the README describes.
+Publishing to PyPI is not automatic. The workflow exists at
+`.github/workflows/publish-pypi.yml`, but it runs only when a person dispatches it with a release
+tag. That is the step that stays manual until the project decides to publish.
+
+To enable it:
+
+1. On PyPI, add a trusted publisher for the `git-ferret` project: owner `fran2889`, repository
+   `git-ferret`, workflow `publish-pypi.yml`, environment `pypi`.
+2. In the GitHub repository, create an environment named `pypi` and protect it with the reviewers
+   you want. There is no stored token; the workflow uses OpenID Connect.
+3. Dispatch **Publish to PyPI** with the tag of a published GitHub release, for example `v0.2.0`.
+
+The workflow validates the tag format before doing anything else, refuses a draft release, downloads
+the artifacts already attached to the GitHub release, and publishes those exact files. It does not
+rebuild them, so what reaches PyPI is what was tested on GitHub.
+
+Once PyPI publishing is live, switch the primary install instruction in the README to
+`uv tool install git-ferret`; keep the checkout path for contributors.
 
 ## Repository settings this relies on
 
 - Actions are allowed to create and approve pull requests, for release-please.
 - The `extra-files` entry in `release-please-config.json` matches the root package by its
   distribution name, `git-ferret`. If that name changes, update the JSONPath as well.
+- The `pypi` environment exists and is protected before the publish workflow is used.
 - The workflow files stay on `main`; release-please reads the branch it is dispatched from, and a
   manual release run from anywhere else is a no-op.
