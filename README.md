@@ -194,10 +194,17 @@ the report says so, and a warning appears once at the top of the run.
   `git -C <repo> fetch --unshallow`.
 - **There is no base branch.** git-ferret uses `origin/main`, `origin/master`, `main`, or `master`,
   and does not guess at anything else. A repository with none of them reports `[NO BASE]`; create
-  the branch, or the remote ref it should compare against.
-- **A Windows console cannot render the report.** The report is UTF-8 and the bracketed marker
-  carries the meaning even when an emoji is replaced. Windows Terminal handles it; in a legacy
-  console, `chcp 65001` switches the code page.
+  the ref it should compare against, for example `git -C <repo> branch main <commit>` to create a
+  local `main` at the commit you want as the base, or add the remote ref (`origin/main`) it should
+  use. Inspect what exists with `git -C <repo> branch -a` and `git -C <repo> remote show origin`.
+- **A Windows console cannot render the report.** Git output is decoded as UTF-8, and the report is
+  written in the destination's encoding; a glyph that cannot be encoded is replaced, so the
+  bracketed marker still carries the meaning. Windows Terminal handles it; in a legacy console,
+  `chcp 65001` switches the code page.
+
+If none of these explains what you see, open an issue with the bug report template. Include the
+output of `git-ferret --version`, `python --version`, and `git --version`, the exact command, and
+the full report or the error and exit code.
 
 ## Three questions, three commands
 
@@ -263,7 +270,7 @@ prose you have to read. A branch that is merged but must be kept comes out as
 
 Every command accepts a directory argument, and all of them default to the current directory.
 
-| Option | Commands | Meaning |
+| Option / argument | Commands | Meaning |
 |---|---|---|
 | `PATH` | `local`, `remote`, `merged` | Directory to scan recursively. Defaults to `.`. |
 | `--no-fetch` | `local`, `remote`, `merged` | Skip `git fetch --all --prune` and read the existing refs. |
@@ -294,8 +301,8 @@ by performing a real three-way merge in memory and comparing the result to the b
 $ git merge-tree --write-tree origin/main origin/fix/typo
 ```
 
-Nothing is checked out, no index or ref is touched, and squash-merged branches are recognised. Git
-itself uses tree comparison for exactly this purpose in `git cherry`.
+Nothing is checked out, no index or ref is touched, and squash-merged branches are recognised.
+This check builds on `git merge-tree`; `git cherry` uses patch-ids, which is a different test.
 
 **Known limitation:** a branch that was merged and then reverted still reports as merged. Reverting
 does not remove ancestry, so the merge genuinely is a no-op. Every safe-to-delete line states its
@@ -431,9 +438,9 @@ $ diff ~/reports/yesterday.md ~/reports/today.md
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup with the development extras, the Make targets, the
 checked-in git hooks, the testing philosophy, and the pull request process.
 
-CI runs the same checks on Python 3.14 on Linux, macOS, and Windows, plus coverage, a wheel build
-with a CLI smoke test, and a `pip-audit` scan. Releases are cut by release-please from Conventional
-Commits.
+CI runs the test suite on Python 3.14 on Linux, macOS, and Windows. The remaining checks run on
+Linux: formatting, linting, the SPDX header check, pyright, coverage, a wheel build with a CLI
+smoke test, and a `pip-audit` scan. Releases are cut by release-please from Conventional Commits.
 
 ## Licence
 

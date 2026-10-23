@@ -1,20 +1,20 @@
 # Contributing to git-ferret
 
 Thanks for taking the time to improve the tool. This guide covers the local workflow, the checks,
-and what a pull request needs. If you are an AI agent, read `AGENTS.md` at the repository root for
-the same contract with the hard constraints spelled out.
+and what a pull request needs.
 
 ## Development setup
 
-You need Python 3.14 or newer, git 2.38 or newer, and [uv](https://docs.astral.sh/uv/) (recommended)
-or pip.
+You need Python 3.14 or newer, git 2.38 or newer, GNU make, and
+[uv](https://docs.astral.sh/uv/) (recommended) or pip. On Windows, `make` is not installed by
+default; install it, or run the underlying `python -m ...` commands directly.
 
 ```console
 $ git clone https://github.com/fran2889/git-ferret
 $ cd git-ferret
 $ uv sync --all-extras --locked
 $ make hooks
-$ make check
+$ uv run --no-sync make check
 ```
 
 `make install` is the pip route: it installs every optional-dependency group at once. `make sync`
@@ -26,15 +26,16 @@ reason.
 and the hooks chain to any global hooks you already have, so nothing is hidden. `make check` must
 pass before you open a pull request.
 
-If you would rather not activate the environment, run `uv run --no-sync make check` after the sync
-above. `--no-sync` uses the environment that is already there instead of resolving it again.
+The `uv run --no-sync` prefix uses the environment that `uv sync` just built, without resolving it
+again or requiring activation. If you would rather activate it, `source .venv/bin/activate`
+(`.venv\Scripts\activate` on Windows) and then plain `make check` works.
 
 If the environment breaks, rebuild it. Every script in `.venv/bin` records the absolute path of the
 interpreter that created it, so uninstalling or upgrading that Python makes all of them fail:
 
 ```console
 $ rm -rf .venv
-$ uv sync --locked
+$ uv sync --all-extras --locked
 ```
 
 ## Make targets
@@ -43,13 +44,13 @@ $ uv sync --locked
 
 | Target | What it does |
 |---|---|
-| `make check` | The fast local gate: formatting, lint, SPDX headers, types, tests |
+| `make check` | The fast local gate: format check, lint, SPDX headers, types, tests |
 | `make test` | The pytest suite |
 | `make typecheck` | pyright in strict mode over the package, tests, and scripts |
 | `make coverage` | The suite plus terminal, XML, and HTML coverage reports |
 | `make build` | Build the sdist and wheel, then run `twine check` |
 | `make audit` | Scan dependencies with `pip-audit` |
-| `make ci` | Everything CI runs, including coverage, build, and audit |
+| `make ci` | The full local gate: format check, lint, SPDX, types, coverage, build, and audit |
 | `make hooks` | Point this repository at `.githooks` |
 | `make clean` | Remove build artifacts and caches |
 
@@ -92,11 +93,11 @@ on every commit, so its edge cases are worth covering.
   Conventional Commit.
 - Run `make check` before pushing. `make ci` adds coverage, the build, and the dependency audit, but
   reaches the network and is slower.
-- Fill in the pull request template. `gh pr create` does not apply the template automatically; pass
-  a filled copy with `--body-file`. Keep the Summary to one to three bullets, one behaviour change
-  each, and name the automated check plus any manual command in the Test Plan.
-- The issue templates apply the `bug` and `enhancement` labels. Add any other label deliberately.
-  Do not hand-apply Dependabot's automation labels.
+- Fill in `.github/PULL_REQUEST_TEMPLATE.md`. `gh pr create` does not apply the template
+  automatically; pass a filled copy with `--body-file`. Keep the Summary to one to three bullets,
+  one behaviour change each, and name the automated check plus any manual command in the Test Plan.
+- The templates in `.github/ISSUE_TEMPLATE/` apply the `bug` and `enhancement` labels. Add any other
+  label deliberately. Do not hand-apply Dependabot's automation labels.
 
 ## Tests
 
@@ -104,7 +105,8 @@ on every commit, so its edge cases are worth covering.
   mock, and the behaviour worth protecting here is git's own.
 - Fixture builders live in `tests/helpers.py`: `make_repo`, `commit`, `clone_local`, and `run`.
   There is no `conftest.py`; a test calls the builder at the exact path it wants.
-- Tests are named for the module they cover, `tests/test_<module>.py`.
+- Tests are named for the module or behaviour they cover, for example `tests/test_report.py` or
+  `tests/test_end_to_end.py`.
 - Add tests for behaviour changes. A bug fix needs a test that failed before the fix; a feature
   needs tests for the new path.
 - Coverage is measured over `git_ferret/` with a floor of 95 in `pyproject.toml`. Cover a distinct
