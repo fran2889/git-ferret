@@ -255,6 +255,39 @@ def test_one_unreadable_repository_does_not_stop_a_remote_run(
     assert "error analysing" in capsys.readouterr().err
 
 
+def test_a_malformed_config_is_one_line_and_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # A broken config file is a mistake the user can fix, exactly like a typo
+    # in a flag, so it gets the same one-line treatment instead of a traceback.
+    config = tmp_path / "bad.toml"
+    config.write_text("author = [\n")
+    monkeypatch.setattr("git_ferret.config.DEFAULT_CONFIG_PATH", config)
+
+    assert _main(["local", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+    assert len(err.strip().splitlines()) == 1
+    assert str(config) in err
+
+
+def test_an_unexpected_failure_is_one_line_and_exits_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # Exit 1 is reserved for what the caller typed. A run that could not finish
+    # is the documented 2, so a script can tell "fix your command" from "come
+    # back later" without parsing stderr.
+    def boom(root: Path) -> list[Path]:
+        raise RuntimeError("disk on fire")
+
+    monkeypatch.setattr(cli, "discover_repos", boom)
+    assert _main(["local", str(tmp_path)]) == 2
+    err = capsys.readouterr().err
+    assert "Traceback" not in err
+    assert len(err.strip().splitlines()) == 1
+    assert "disk on fire" in err
+
+
 class _RecordingStream:
     """A stream that records how the entry point asks it to encode."""
 

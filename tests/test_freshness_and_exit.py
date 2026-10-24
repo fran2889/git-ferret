@@ -202,6 +202,31 @@ def test_missing_path_exits_one(tmp_path: Path):
     assert "Traceback" not in result.stderr
 
 
+def test_a_git_that_cannot_run_exits_two_with_one_line(tmp_path: Path):
+    # The tool depends on git, but a machine without it should get a readable
+    # failure and the documented "run stopped" code, not a traceback.
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    empty_path = tmp_path / "empty-path"
+    empty_path.mkdir()
+
+    result = subprocess.run(
+        [sys.executable, "-m", "git_ferret.cli", "local", str(repo), "--no-fetch"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=REPO_ROOT,
+        env={**os.environ, "PATH": str(empty_path)},
+    )
+
+    assert result.returncode == 2, result.stderr
+    assert "Traceback" not in result.stderr
+    assert len(result.stderr.strip().splitlines()) == 1
+
+
 def test_help_exits_zero():
     assert _cli("--help").returncode == 0
 

@@ -53,8 +53,8 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
 - Emoji are decorative. The bracketed marker (`[NOT PUSHED]`, `[SAFE TO DELETE]`) carries the
   meaning on its own. Never move information into the emoji.
 - Findings never change the exit code. `0` means the run completed; `1` is a usage error; `2` is a
-  run that could not start or finish, for example because `git` cannot be executed. Do not turn a
-  finding into a failing exit code.
+  run that could not start or finish, for example because `git` cannot be executed or a config file
+  cannot be read. Do not turn a finding into a failing exit code.
 - Python 3.14 or newer, and git 2.38 or newer because the merge test uses
   `merge-tree --write-tree`.
 - Existing README promises must keep holding: read-only behaviour, exit codes, and markdown output.

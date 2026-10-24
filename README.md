@@ -381,6 +381,9 @@ A branch matching the whitelist is hidden from `local` **only when it is clean**
 branch with unpushed commits or a dirty worktree still shows up. For `remote` and `merged` it is
 ignored outright.
 
+A file that cannot be parsed, or whose values have the wrong shape, is reported as a usage error
+naming the file rather than as a traceback.
+
 Identity resolves in this order, first match wins:
 
 1. `--author` on the command line (repeatable, or comma-separated)
@@ -428,8 +431,8 @@ diffing two reports rather than on exit status.
 | Exit code | Meaning |
 |---|---|
 | `0` | The run completed. Findings do **not** change this. |
-| `1` | Usage error: unknown command or flag, or a path that is not a directory. |
-| `2` | The run could not start or finish: `git` is missing or cannot be executed. |
+| `1` | Usage error: unknown command or flag, a path that is not a directory, or an unusable config file. |
+| `2` | The run could not start or finish: `git` could not be run, or an unexpected error stopped it before the report finished. |
 
 A repository that cannot be read is reported and skipped, not fatal.
 
