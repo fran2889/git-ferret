@@ -113,7 +113,8 @@ on every commit, so its edge cases are worth covering.
 - Coverage is measured over `git_ferret/` with a floor of 95 in `pyproject.toml`. Cover a distinct
   path or failure mode rather than duplicating an existing test to move the number.
 - The suite runs on Linux, macOS, and Windows. Subprocess output is decoded as UTF-8, paths are
-  built with `pathlib`, and the report survives a console that cannot render emoji.
+  built with `pathlib`, and the CLI reconfigures its output to UTF-8 so redirected reports are
+  lossless rather than limited to the console code page.
 - New scripts under `scripts/` need unit tests. `scripts/check_spdx.py` and
   `scripts/check_commit_msg.py` are both covered.
 

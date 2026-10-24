@@ -198,9 +198,9 @@ the report says so, and a warning appears once at the top of the run.
   local `main` at the commit you want as the base, or add the remote ref (`origin/main`) it should
   use. Inspect what exists with `git -C <repo> branch -a` and `git -C <repo> remote show origin`.
 - **A Windows console cannot render the report.** Git output is decoded as UTF-8, and the report is
-  written in the destination's encoding; a glyph that cannot be encoded is replaced, so the
-  bracketed marker still carries the meaning. Windows Terminal handles it; in a legacy console,
-  `chcp 65001` switches the code page.
+  always written as UTF-8, so a redirected file keeps every emoji and branch name. A legacy console
+  may still draw an emoji badly, but the bracketed marker carries the meaning either way. Windows
+  Terminal handles it, and `chcp 65001` switches a legacy console's code page.
 
 If none of these explains what you see, open an issue with the bug report template. Include the
 output of `git-ferret --version`, `python --version`, and `git --version`, the exact command, and
@@ -392,8 +392,8 @@ $ git-ferret local ~/src > report.md
 
 No ANSI escapes and no tables ever reach the file. Emoji are decorative only: the bracketed
 marker always carries the meaning on its own, so a terminal without an emoji font loses nothing.
-Git output is decoded as UTF-8 regardless of the console code page, and a glyph the destination
-cannot encode is replaced rather than failing the run.
+Git output is decoded as UTF-8 regardless of the console code page, and the report is written as
+UTF-8 too, so redirecting it is lossless rather than limited to the console's code page.
 
 | Marker | Meaning |
 |---|---|

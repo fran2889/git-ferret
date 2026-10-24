@@ -347,6 +347,30 @@ def fast_forward_worktrees(repo: Path) -> list[str]:
     return updated
 
 
+def _configure_output() -> None:
+    """Write the report as UTF-8 even where the console defaults otherwise.
+
+    The report uses emoji markers and quotes branch names and repository paths.
+    A redirected stream on Windows encodes cp1252, so the first marker would
+    raise ``UnicodeEncodeError``; a POSIX stream under ``LANG=C`` has the same
+    problem with ASCII. Contributors and issues are UTF-8, so state that for
+    both streams rather than degrading the text to the console's code page.
+
+    ``errors="replace"`` is the backstop for a POSIX path whose bytes are not
+    UTF-8: git output is already decoded leniently, but a directory name is
+    not, and losing one glyph beats losing the run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except OSError, ValueError:
+            # Detached or already-closed stream: nothing to configure.
+            continue
+
+
 def main() -> None:
     """Entry point.
 
@@ -364,6 +388,7 @@ def main() -> None:
     typer returns it -- the command's own return value, or the code of any
     ``typer.Exit`` it raised -- so the return value is what has to be read here.
     """
+    _configure_output()
     try:
         code = app(standalone_mode=False)
     except _USAGE_ERRORS as exc:
