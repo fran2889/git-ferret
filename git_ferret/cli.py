@@ -350,11 +350,15 @@ def fast_forward_worktrees(repo: Path) -> list[str]:
 def _configure_output() -> None:
     """Write the report as UTF-8 even where the console defaults otherwise.
 
-    The report uses emoji markers and may quote any branch name. A redirected
-    stream on Windows encodes cp1252, so the first marker would raise
-    ``UnicodeEncodeError``; a POSIX stream under ``LANG=C`` has the same problem
-    with ASCII. Contributors and issues are UTF-8, so state that for both
-    streams rather than degrading the text to the console's code page.
+    The report uses emoji markers and quotes branch names and repository paths.
+    A redirected stream on Windows encodes cp1252, so the first marker would
+    raise ``UnicodeEncodeError``; a POSIX stream under ``LANG=C`` has the same
+    problem with ASCII. Contributors and issues are UTF-8, so state that for
+    both streams rather than degrading the text to the console's code page.
+
+    ``errors="replace"`` is the backstop for a POSIX path whose bytes are not
+    UTF-8: git output is already decoded leniently, but a directory name is
+    not, and losing one glyph beats losing the run.
     """
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
