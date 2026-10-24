@@ -154,15 +154,17 @@ def test_stale_warning_names_the_true_count(tmp_path: Path):
 
 def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path: Path):
     # One stale repo among many is the case worth nagging about, and it is not
-    # necessarily the first one. Here the first repository's fetch succeeds and
-    # the second's fails.
+    # necessarily the first one. Here two fetches succeed and the last one
+    # fails. Three repositories rather than two, so counting the wrong ones
+    # changes the total and cannot pass by coincidence.
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
 
     scan = tmp_path / "scan"
     clone_local(src, scan / "a-fresh")
-    broken = make_repo(scan / "b-broken")
+    clone_local(src, scan / "b-fresh")
+    broken = make_repo(scan / "c-broken")
     (broken / "f.txt").write_text("a\n")
     commit(broken, "base")
     run(broken, "remote", "add", "origin", "/nonexistent/path.git")
@@ -170,7 +172,7 @@ def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path: Path):
     result = _cli("local", str(scan))
 
     assert "stale" in result.stdout.lower()
-    assert "1 of 2 repositories" in result.stdout
+    assert "1 of 3 repositories" in result.stdout
 
 
 # --- exit codes ---------------------------------------------------------------

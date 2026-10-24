@@ -34,7 +34,13 @@ from git_ferret.discovery import discover_repos, list_worktrees
 from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
 from git_ferret.gitops import fetch_all, resolve_base_ref
 from git_ferret.models import RepoReport
-from git_ferret.report import display_path, emit, render_footer, render_header, render_repo
+from git_ferret.report import (
+    display_path,
+    emit,
+    render_header,
+    render_repo,
+    render_stale_warning,
+)
 
 app = typer.Typer(help="Audit many local git repositories at once. Reports only.")
 
@@ -134,7 +140,7 @@ def local(
         emit(render_repo(report, root))
 
     _emit_summary(updated, root)
-    emit(render_footer(stale, analysed))
+    _emit_footer(stale, analysed)
 
 
 @app.command()
@@ -263,7 +269,7 @@ def _run(
             stale += 1
         emit(render_repo(report, root))
 
-    emit(render_footer(stale, analysed))
+    _emit_footer(stale, analysed)
 
 
 def run_command(
@@ -282,6 +288,8 @@ def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:
 
     No marker on these lines: the section says what they are, and a status
     marker here would be a judgement about work that was simply done as asked.
+    The block ends with the blank line the report uses between sections, so a
+    footer appended after it does not sit on the last fast-forward line.
     """
     if not updated:
         return
@@ -289,7 +297,20 @@ def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:
     lines += [
         f"- {display_path(repo, root)}: `{branch}` fast-forwarded" for repo, branch in updated
     ]
-    emit("\n".join(lines) + "\n")
+    emit("\n".join(lines) + "\n\n")
+
+
+def _emit_footer(stale: int, analysed: int) -> None:
+    """Print the run's stale summary, or nothing when every repository was fresh.
+
+    *analysed* counts repositories that produced a report, not repositories
+    discovered: one whose analysis failed was never read, so it can be neither
+    stale nor part of the total the warning divides. The empty case is skipped
+    rather than emitted as an empty block, because ``emit`` adds a trailing
+    blank line on a terminal even for empty text.
+    """
+    if stale:
+        emit(render_stale_warning(stale, analysed))
 
 
 def fast_forward_worktrees(repo: Path) -> list[str]:

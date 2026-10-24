@@ -4,9 +4,12 @@
 """End-to-end coverage: all three subcommands over a realistic repository tree."""
 
 from pathlib import Path
+from typing import TextIO
 
+import pytest
 from typer.testing import CliRunner
 
+from git_ferret import cli as cli_module
 from git_ferret.cli import build_parser
 from tests.helpers import clone_local, commit, make_repo, run
 
@@ -175,3 +178,42 @@ def test_every_heading_is_followed_by_its_fetch_line(tmp_path: Path):
     headings = [i for i, line in enumerate(lines) if line.startswith("## ")]
     for index in headings:
         assert lines[index + 1] != "", f"title and its line split apart: {lines[index]!r}"
+
+
+def test_each_repository_is_fetched_just_before_its_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    # Streaming is the point of fetching per repository: the fetch for a repo is
+    # followed immediately by that repo's section, not deferred behind every
+    # other fetch. Record the two calls at the CLI boundary and leave git real.
+    for name in ("a", "b"):
+        repo = make_repo(tmp_path / name)
+        (repo / "f.txt").write_text("a\n")
+        commit(repo, "base")
+
+    events: list[tuple[str, str]] = []
+    real_fetch = cli_module._fetch_report  # pyright: ignore[reportPrivateUsage]
+    real_emit = cli_module.emit
+
+    def recording_fetch(repo: Path, no_fetch: bool) -> tuple[bool, bool]:
+        events.append(("fetch", repo.name))
+        return real_fetch(repo, no_fetch)
+
+    def recording_emit(text: str, stream: TextIO | None = None) -> None:
+        for name in ("a", "b"):
+            if text.startswith(f"## {name}\n"):
+                events.append(("section", name))
+        real_emit(text, stream)
+
+    monkeypatch.setattr(cli_module, "_fetch_report", recording_fetch)
+    monkeypatch.setattr(cli_module, "emit", recording_emit)
+
+    res = runner.invoke(build_parser(), ["local", str(tmp_path), "--no-fetch"])
+
+    assert res.exit_code == 0, res.output
+    assert events == [
+        ("fetch", "a"),
+        ("section", "a"),
+        ("fetch", "b"),
+        ("section", "b"),
+    ]

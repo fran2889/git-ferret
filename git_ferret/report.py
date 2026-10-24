@@ -127,7 +127,7 @@ def render_header() -> str:
     return _block(["# git-ferret"])
 
 
-def render_footer(stale_count: int, total: int) -> str:
+def render_stale_warning(stale_count: int, total: int) -> str:
     """The stale-state warning, printed once after the report.
 
     It sits at the end rather than the top because repositories are fetched one
@@ -135,6 +135,10 @@ def render_footer(stale_count: int, total: int) -> str:
     one has been read, and printing it early would mean delaying every result
     behind every fetch. Each repository's heading still carries its own
     timestamp, so the detail is available without reaching the footer.
+
+    A run that is interrupted, or that fails before the last repository, never
+    reaches this line. That is acceptable because the per-repository headings
+    carry the same state; the warning only aggregates what they already say.
     """
     if not stale_count:
         return ""
@@ -154,7 +158,9 @@ def render_report(reports: list[RepoReport], stale_count: int, root: Path | None
     newline rather than with a separator.
     """
     body = "".join(render_repo(report, root) for report in reports)
-    return (render_header() + body + render_footer(stale_count, len(reports))).rstrip() + "\n"
+    return (
+        render_header() + body + render_stale_warning(stale_count, len(reports))
+    ).rstrip() + "\n"
 
 
 def _split_heading(text: str) -> tuple[str, str]:
