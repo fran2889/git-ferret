@@ -136,6 +136,19 @@ def test_rollup_is_a_block_of_its_own(tmp_path: Path):
     assert lines[heading + 1] == ""
 
 
+def test_stale_footer_is_separated_from_the_rollup(tmp_path: Path):
+    # --no-fetch leaves every repository stale, so the rollup is followed by the
+    # footer. They are two blocks, not a fast-forward line with a quote glued
+    # underneath it.
+    root = _updatable_tree(tmp_path)
+
+    res = CliRunner().invoke(build_parser(), ["local", str(root), "--no-fetch", "--update"])
+
+    assert res.exit_code == 0, res.output
+    assert "- app: `feat` fast-forwarded\n\n> " in res.stdout
+    assert "2 of 2 repositories" in res.stdout
+
+
 def test_rollup_is_absent_when_nothing_was_updated(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
