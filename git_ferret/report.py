@@ -18,10 +18,9 @@ repository from the next.
 
 from __future__ import annotations
 
-import io
 import sys
 from pathlib import Path
-from typing import IO, TextIO, cast
+from typing import TextIO
 
 from git_ferret.models import Finding, RepoReport
 
@@ -173,71 +172,22 @@ def _split_heading(text: str) -> tuple[str, str]:
     return "", text
 
 
-def _encodable(text: str, out: TextIO) -> str:
-    """*text* as *out* can write it.
-
-    A redirected stream on Windows can be cp1252 or ASCII, and the report
-    carries emoji. The bracketed marker is what means something, so replacing
-    an unrepresentable glyph is better than failing the whole run with
-    ``UnicodeEncodeError``.
-    """
-    encoding = getattr(out, "encoding", None)
-    if not encoding:
-        return text
-    try:
-        text.encode(encoding)
-    except LookupError:
-        return text
-    except UnicodeEncodeError:
-        return text.encode(encoding, errors="replace").decode(encoding, errors="replace")
-    return text
-
-
-class _EncodableStream(io.TextIOBase):
-    """A write-only view of *stream* that cannot raise ``UnicodeEncodeError``.
-
-    Rich adds its own bullet characters after the report text is built, so
-    sanitising the text alone is not enough: every write passes through
-    :func:`_encodable`, including the decoration rich contributes.
-    """
-
-    # ``TextIOBase.encoding`` is read-only and ``None`` on the runtime base,
-    # so the wrapped stream's encoding is copied onto the instance.
-    encoding: str = "utf-8"
-
-    def __init__(self, stream: TextIO) -> None:
-        self._stream = stream
-        self.encoding = getattr(stream, "encoding", None) or "utf-8"
-
-    def write(self, text: str) -> int:
-        return self._stream.write(_encodable(text, self._stream))
-
-    def flush(self) -> None:
-        self._stream.flush()
-
-    def isatty(self) -> bool:
-        return self._stream.isatty()
-
-    def fileno(self) -> int:
-        return self._stream.fileno()
-
-
 def emit(text: str, stream: TextIO | None = None) -> None:
     """Write *text*, richly only when the destination is a terminal.
 
     Piping must yield clean markdown, so styling is confined to the TTY path.
+    The entry point reconfigures its streams to UTF-8, so this writes the text
+    as-is rather than degrading characters the stream cannot encode.
     """
     out = stream if stream is not None else sys.stdout
     if not getattr(out, "isatty", lambda: False)():
-        out.write(_encodable(text, out))
+        out.write(text)
         return
 
     from rich.console import Console
     from rich.markdown import Markdown
 
-    # ``TextIOBase`` is not nominally an ``IO[str]`` in typeshed; the proxy
-    # implements the writes rich performs and nothing else.
-    console = Console(file=cast(IO[str], _EncodableStream(out)), force_terminal=True)
+    console = Console(file=out, force_terminal=True)
     title, body = _split_heading(text)
     if title:
         console.print(Markdown(title))

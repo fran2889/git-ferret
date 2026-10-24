@@ -15,6 +15,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from fnmatch import fnmatchcase
 from pathlib import Path
+from typing import Any, cast
 
 from git_ferret.gitcmd import run_git
 
@@ -22,6 +23,40 @@ DEFAULT_CONFIG_PATH = Path.home() / ".git-ferret.toml"
 
 # Always excluded from branch reports, whatever the configuration says.
 ALWAYS_EXCLUDED = ("main", "master")
+
+
+class ConfigError(Exception):
+    """The config file exists but is not usable as git-ferret configuration.
+
+    A malformed file is the user's mistake, not a crash: the CLI turns this into
+    the same one-line usage error as a mistyped flag.
+    """
+
+
+def _one_line(exc: BaseException) -> str:
+    """*exc* as a single line, for a message that has to stay one line."""
+    return " ".join(str(exc).split())
+
+
+def _strings(value: object, *, allow_string: bool) -> list[str] | None:
+    """*value* as a list of strings, or ``None`` when it is not one.
+
+    ``tomllib`` hands back ``Any``, which strict type checking treats as
+    unknown; doing the narrowing here keeps the validation in one place and the
+    rest of :meth:`Config.load` fully typed. ``author`` accepts a bare string
+    (one identity is the common case); ``whitelist.patterns`` does not, because
+    a list is what the documented shape says.
+    """
+    if isinstance(value, str):
+        return [value] if allow_string else None
+    if not isinstance(value, list):
+        return None
+    items: list[str] = []
+    for item in cast("list[object]", value):
+        if not isinstance(item, str):
+            return None
+        items.append(item)
+    return items
 
 
 def is_always_excluded(branch: str, base_ref: str | None) -> bool:
@@ -68,15 +103,33 @@ class Config:
 
     @classmethod
     def load(cls, path: Path | None = None) -> Config:
-        """Read the TOML config. A missing file is not an error."""
+        """Read the TOML config. A missing file is not an error.
+
+        A file that exists but cannot be understood raises :class:`ConfigError`
+        rather than surfacing as a traceback: in a weekly cron job a crash and a
+        clean run are both non-zero for reasons nobody can read.
+        """
         config_path = path if path is not None else DEFAULT_CONFIG_PATH
         if not config_path.exists():
             return cls()
-        data = tomllib.loads(config_path.read_text(encoding="utf-8"))
-        raw_author = data.get("author", [])
-        author = split_identities([raw_author] if isinstance(raw_author, str) else list(raw_author))
-        whitelist = list(data.get("whitelist", {}).get("patterns", []))
-        return cls(author=author, whitelist=whitelist)
+        try:
+            data: dict[str, Any] = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+            raise ConfigError(f"{config_path}: {_one_line(exc)}") from None
+
+        author = _strings(data.get("author", []), allow_string=True)
+        if author is None:
+            raise ConfigError(f"{config_path}: 'author' must be a string or a list of strings")
+
+        whitelist_table = data.get("whitelist", {})
+        if not isinstance(whitelist_table, dict):
+            raise ConfigError(f"{config_path}: 'whitelist' must be a table")
+        table = cast("dict[str, object]", whitelist_table)
+        whitelist = _strings(table.get("patterns", []), allow_string=False)
+        if whitelist is None:
+            raise ConfigError(f"{config_path}: 'whitelist.patterns' must be a list of strings")
+
+        return cls(author=split_identities(author), whitelist=whitelist)
 
     def is_whitelisted(self, branch: str) -> bool:
         """Whether *branch* matches a whitelist pattern.

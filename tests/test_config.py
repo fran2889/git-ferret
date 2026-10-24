@@ -5,8 +5,11 @@
 
 from pathlib import Path
 
+import pytest
+
 from git_ferret.config import (
     Config,
+    ConfigError,
     identity_matches,
     is_always_excluded,
     resolve_identities,
@@ -136,6 +139,44 @@ def test_load_reads_the_file_as_utf8_regardless_of_locale(tmp_path: Path):
 def test_load_missing_file_is_empty_not_an_error(tmp_path: Path):
     c = Config.load(tmp_path / "absent.toml")
     assert c.author == [] and c.whitelist == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "author = [\n",
+        "author = 5\n",
+        'author = ["a@x.com", 5]\n',
+        'whitelist = "release/*"\n',
+        'whitelist = { patterns = "release/*" }\n',
+    ],
+    ids=[
+        "invalid-toml",
+        "author-not-a-list",
+        "author-entry-not-a-string",
+        "whitelist-not-a-table",
+        "patterns-not-a-list",
+    ],
+)
+def test_a_malformed_config_is_a_config_error(tmp_path: Path, text: str):
+    # A broken file is the user's mistake, not a crash. The message names the
+    # file and stays on one line so the CLI can print it as a usage error.
+    path = tmp_path / "c.toml"
+    path.write_text(text)
+    with pytest.raises(ConfigError) as exc:
+        Config.load(path)
+    assert str(path) in str(exc.value)
+    assert len(str(exc.value).splitlines()) == 1
+
+
+def test_an_unreadable_config_names_the_file(tmp_path: Path):
+    # Invalid UTF-8 is a decode failure, not a TOML failure, and still has to
+    # come out as a config error rather than a traceback.
+    path = tmp_path / "c.toml"
+    path.write_bytes(b"author = \xff\n")
+    with pytest.raises(ConfigError) as exc:
+        Config.load(path)
+    assert str(path) in str(exc.value)
 
 
 def _repo(tmp_path: Path):
