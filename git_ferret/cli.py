@@ -31,7 +31,7 @@ from git_ferret.analysis.remote import (
 )
 from git_ferret.config import Config, ConfigError, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
-from git_ferret.gitcmd import GitError, run_git
+from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
 from git_ferret.gitops import fetch_all, refs_updated_at, resolve_base_ref
 from git_ferret.models import RepoReport
 from git_ferret.report import display_path, emit, render_header, render_repo
@@ -106,6 +106,7 @@ def local(
     """Branches checked out locally, worktrees, dirty state."""
     config = Config.load()
     root = _resolve_root(path)
+    require_git()
     updated: list[tuple[Path, str]] = []
 
     repos = discover_repos(root)
@@ -257,6 +258,7 @@ def _run(
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
+    require_git()
 
     repos = discover_repos(root)
     # Fetch every repository first (see `local`): the stale warning's count is a
@@ -348,13 +350,39 @@ def fast_forward_worktrees(repo: Path) -> list[str]:
     return updated
 
 
+def _configure_output() -> None:
+    """Write the report as UTF-8 even where the console defaults otherwise.
+
+    The report uses emoji markers and quotes branch names and repository paths.
+    A redirected stream on Windows encodes cp1252, so the first marker would
+    raise ``UnicodeEncodeError``; a POSIX stream under ``LANG=C`` has the same
+    problem with ASCII. Contributors and issues are UTF-8, so state that for
+    both streams rather than degrading the text to the console's code page.
+
+    ``errors="replace"`` is the backstop for a POSIX path whose bytes are not
+    UTF-8: git output is already decoded leniently, but a directory name is
+    not, and losing one glyph beats losing the run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except OSError, ValueError:
+            # Detached or already-closed stream: nothing to configure.
+            continue
+
+
 def main() -> None:
     """Entry point.
 
     Everything this tool considers a usage problem -- a bad flag, an unknown
     command, a path that is not a directory, an unusable config file -- is one
     line on stderr and exit 1. A failure that stops the run before it finishes
-    is one line and exit 2. Findings never change the exit code.
+    is one line and exit 2. A git that cannot be executed is one of those
+    failures rather than a finding, because the scan never produced a report
+    anyone could trust. Findings themselves never change the exit code.
 
     ``standalone_mode=False`` is what makes that possible: it hands the
     framework's errors over instead of letting it print and exit itself. Without
@@ -366,11 +394,18 @@ def main() -> None:
     typer returns it -- the command's own return value, or the code of any
     ``typer.Exit`` it raised -- so the return value is what has to be read here.
     """
+    _configure_output()
     try:
         code = app(standalone_mode=False)
     except _USAGE_ERRORS as exc:
         _warn(f"error: {exc}")
         raise SystemExit(1) from None
+    except GitUnavailable as exc:
+        # The documented meaning of 2: the run stopped before it could
+        # complete. Git disappearing mid-scan reaches this too, because the
+        # per-repository handlers deliberately do not catch it.
+        _warn(f"error: {exc}")
+        raise SystemExit(2) from None
     except typer.Abort:
         _warn("aborted")
         raise SystemExit(1) from None

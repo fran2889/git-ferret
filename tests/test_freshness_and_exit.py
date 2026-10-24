@@ -28,6 +28,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _cli(*args: str) -> subprocess.CompletedProcess[str]:
+    # The CLI reconfigures its streams to UTF-8 whatever the console locale
+    # says. Decode as UTF-8 here too: with the locale default (cp1252 on
+    # Windows) the parent would otherwise raise UnicodeDecodeError on the first
+    # emoji marker instead of returning the report.
     return subprocess.run(
         [sys.executable, "-m", "git_ferret.cli", *args],
         check=False,

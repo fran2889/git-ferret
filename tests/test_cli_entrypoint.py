@@ -1,15 +1,18 @@
 # SPDX-FileCopyrightText: 2026 Fran
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Tests for what the entry point does with a run that goes wrong.
+"""Tests for what the entry point does around a run.
 
 The exit code itself is covered end to end in ``test_freshness_and_exit.py``,
 but those run the CLI in a subprocess and coverage of a subprocess run is not
-collected. What is pinned here is the other half: that one unreadable
-repository does not cost you the other twenty-nine, and that the tool's own
-usage errors reach the caller as exit 1.
+collected. What is pinned here is the other half: that the output streams are
+UTF-8 whatever the console says, that one unreadable repository does not cost
+you the other twenty-nine, and that the tool's own usage errors reach the
+caller as exit 1.
 """
 
+import io
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -19,7 +22,10 @@ import typer
 
 from git_ferret import __version__, cli
 from git_ferret.config import Config
-from tests.helpers import make_repo
+from git_ferret.gitcmd import GitUnavailable
+from tests.helpers import commit, make_repo
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _main(argv: list[str]) -> int:
@@ -30,6 +36,13 @@ def _main(argv: list[str]) -> int:
     except SystemExit as exc:
         return int(exc.code or 0)
     return 0
+
+
+def _hide_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put an empty directory on PATH so no git can be found."""
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
 
 
 def test_a_successful_run_returns_zero(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
@@ -43,6 +56,63 @@ def test_version_is_printed_without_running_a_scan(capsys: pytest.CaptureFixture
     # and without touching a repository.
     assert _main(["--version"]) == 0
     assert capsys.readouterr().out.strip() == f"git-ferret {__version__}"
+
+
+def test_version_still_works_when_git_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # A broken install is exactly when the version is needed for a bug report,
+    # so the environment check must stay out of the way of `--version`.
+    _hide_git(tmp_path, monkeypatch)
+    assert _main(["--version"]) == 0
+    assert capsys.readouterr().out.strip() == f"git-ferret {__version__}"
+
+
+@pytest.mark.parametrize("command", ["local", "remote", "merged"])
+def test_a_missing_git_is_one_line_and_exit_two(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+):
+    # A scan without git cannot produce a trustworthy report. It must say so
+    # once and stop, rather than traceback or print every repository as stale.
+    make_repo(tmp_path / "r")
+    _hide_git(tmp_path, monkeypatch)
+
+    assert _main([command, str(tmp_path), "--no-fetch"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "error: cannot run git" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_a_bad_path_is_a_usage_error_even_when_git_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # Argument validation comes before the environment check: a typo is still a
+    # usage error and exit 1.
+    _hide_git(tmp_path, monkeypatch)
+    assert _main(["local", str(tmp_path / "nope")]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_git_disappearing_mid_scan_stops_the_run_with_exit_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # The per-repository handlers skip a broken repository, so GitUnavailable
+    # must not be one of the errors they catch: a git that vanishes mid-scan has
+    # to stop the run rather than leave a partial report that looks complete.
+    make_repo(tmp_path / "r")
+
+    def vanish(*args: object, **kwargs: object) -> None:
+        raise GitUnavailable("cannot run git")
+
+    monkeypatch.setattr(cli, "analyse_local", vanish)
+    assert _main(["local", str(tmp_path)]) == 2
+    captured = capsys.readouterr()
+    assert "error: cannot run git" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_a_missing_path_is_a_usage_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
@@ -216,3 +286,75 @@ def test_an_unexpected_failure_is_one_line_and_exits_two(
     assert "Traceback" not in err
     assert len(err.strip().splitlines()) == 1
     assert "disk on fire" in err
+
+
+class _RecordingStream:
+    """A stream that records how the entry point asks it to encode."""
+
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def reconfigure(self, **kwargs: str) -> None:
+        self.calls.append(kwargs)
+
+
+def test_the_entry_point_reconfigures_both_streams_as_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # The markers are emoji and a branch name can be any UTF-8, but a redirected
+    # Windows stream encodes cp1252 and would raise on the first line. Both
+    # streams matter: an unreadable repository reports on stderr.
+    out, err = _RecordingStream(), _RecordingStream()
+    monkeypatch.setattr(sys, "stdout", out)
+    monkeypatch.setattr(sys, "stderr", err)
+
+    cli._configure_output()  # pyright: ignore[reportPrivateUsage]
+
+    assert out.calls == [{"encoding": "utf-8", "errors": "replace"}]
+    assert err.calls == [{"encoding": "utf-8", "errors": "replace"}]
+
+
+def test_a_stream_that_cannot_be_reconfigured_is_left_alone(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    # StringIO and streams owned by a wrapper have no reconfigure; that is not
+    # a reason to fail the run.
+    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+    cli._configure_output()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_closed_stream_does_not_stop_the_run(monkeypatch: pytest.MonkeyPatch):
+    # A detached or closed stream raises ValueError from reconfigure. Nothing
+    # in main can close one first, but that is no reason to turn an encoding
+    # detail into a traceback instead of a report.
+    stream = io.TextIOWrapper(io.BytesIO())
+    stream.close()
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+
+    cli._configure_output()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_cli_writes_utf8_even_when_the_environment_names_a_legacy_encoding(
+    tmp_path: Path,
+):
+    # A redirected Windows stream picks up the console code page, and forcing
+    # cp1252 here reproduces that anywhere. The entry point has to reconfigure
+    # both streams, otherwise the first emoji marker stops the run.
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "git_ferret.cli", "local", str(tmp_path), "--no-fetch"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "⚠️" in result.stdout
