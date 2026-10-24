@@ -31,7 +31,7 @@ from git_ferret.analysis.remote import (
 )
 from git_ferret.config import Config, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
-from git_ferret.gitcmd import GitError, run_git
+from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
 from git_ferret.gitops import fetch_all, refs_updated_at, resolve_base_ref
 from git_ferret.models import RepoReport
 from git_ferret.report import display_path, emit, render_header, render_repo
@@ -106,6 +106,7 @@ def local(
     """Branches checked out locally, worktrees, dirty state."""
     config = Config.load()
     root = _resolve_root(path)
+    require_git()
     updated: list[tuple[Path, str]] = []
 
     repos = discover_repos(root)
@@ -256,6 +257,7 @@ def _run(
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
+    require_git()
 
     repos = discover_repos(root)
     # Fetch every repository first (see `local`): the stale warning's count is a
@@ -376,7 +378,10 @@ def main() -> None:
 
     Everything this tool considers a usage problem -- a bad flag, an unknown
     command, a path that is not a directory -- is one line on stderr and exit
-    1. Findings never change the exit code.
+    1. A git that cannot be executed is an environment failure rather than a
+    finding: it is one line on stderr and exit 2, because the scan never
+    produced a report anyone could trust. Findings themselves never change the
+    exit code.
 
     ``standalone_mode=False`` is what makes that possible: it hands the
     framework's errors over instead of letting it print and exit itself. Without
@@ -394,6 +399,12 @@ def main() -> None:
     except _USAGE_ERRORS as exc:
         _warn(f"error: {exc}")
         raise SystemExit(1) from None
+    except GitUnavailable as exc:
+        # The documented meaning of 2: the run stopped before it could
+        # complete. Git disappearing mid-scan reaches this too, because the
+        # per-repository handlers deliberately do not catch it.
+        _warn(f"error: {exc}")
+        raise SystemExit(2) from None
     except typer.Abort:
         _warn("aborted")
         raise SystemExit(1) from None
