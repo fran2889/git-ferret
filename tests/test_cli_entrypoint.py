@@ -1,16 +1,18 @@
 # SPDX-FileCopyrightText: 2026 Fran
 # SPDX-License-Identifier: GPL-3.0-only
 
-"""Tests for what the entry point does with a run that goes wrong.
+"""Tests for what the entry point does around a run.
 
 The exit code itself is covered end to end in ``test_freshness_and_exit.py``,
 but those run the CLI in a subprocess and coverage of a subprocess run is not
-collected. What is pinned here is the other half: that one unreadable
-repository does not cost you the other twenty-nine, and that the tool's own
-usage errors reach the caller as exit 1.
+collected. What is pinned here is the other half: that the output streams are
+UTF-8 whatever the console says, that one unreadable repository does not cost
+you the other twenty-nine, and that the tool's own usage errors reach the
+caller as exit 1.
 """
 
 import io
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +22,9 @@ import typer
 
 from git_ferret import __version__, cli
 from git_ferret.config import Config
-from tests.helpers import make_repo
+from tests.helpers import commit, make_repo
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _main(argv: list[str]) -> int:
@@ -196,9 +200,12 @@ class _RecordingStream:
         self.calls.append(kwargs)
 
 
-def test_the_report_is_written_as_utf8(monkeypatch: pytest.MonkeyPatch):
+def test_the_entry_point_reconfigures_both_streams_as_utf8(
+    monkeypatch: pytest.MonkeyPatch,
+):
     # The markers are emoji and a branch name can be any UTF-8, but a redirected
-    # Windows stream encodes cp1252 and would raise on the first line.
+    # Windows stream encodes cp1252 and would raise on the first line. Both
+    # streams matter: an unreadable repository reports on stderr.
     out, err = _RecordingStream(), _RecordingStream()
     monkeypatch.setattr(sys, "stdout", out)
     monkeypatch.setattr(sys, "stderr", err)
@@ -217,3 +224,39 @@ def test_a_stream_that_cannot_be_reconfigured_is_left_alone(
     monkeypatch.setattr(sys, "stdout", io.StringIO())
     monkeypatch.setattr(sys, "stderr", io.StringIO())
     cli._configure_output()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_a_closed_stream_does_not_stop_the_run(monkeypatch: pytest.MonkeyPatch):
+    # A detached or closed stream raises ValueError from reconfigure. Nothing
+    # in main can close one first, but that is no reason to turn an encoding
+    # detail into a traceback instead of a report.
+    stream = io.TextIOWrapper(io.BytesIO())
+    stream.close()
+    monkeypatch.setattr(sys, "stdout", stream)
+    monkeypatch.setattr(sys, "stderr", io.StringIO())
+
+    cli._configure_output()  # pyright: ignore[reportPrivateUsage]
+
+
+def test_cli_writes_utf8_even_when_the_environment_names_a_legacy_encoding(
+    tmp_path: Path,
+):
+    # A redirected Windows stream picks up the console code page, and forcing
+    # cp1252 here reproduces that anywhere. The entry point has to reconfigure
+    # both streams, otherwise the first emoji marker stops the run.
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "git_ferret.cli", "local", str(tmp_path), "--no-fetch"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=REPO_ROOT,
+        env={**os.environ, "PYTHONIOENCODING": "cp1252"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "⚠️" in result.stdout
