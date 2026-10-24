@@ -5,11 +5,16 @@
 
 from pathlib import Path
 
+import pytest
+from typer.testing import CliRunner
+
+from git_ferret import config
 from git_ferret.analysis.remote import (
     analyse_merged_candidates,
     analyse_remote,
     local_branch_unpushed_map,
 )
+from git_ferret.cli import build_parser, run_command
 from git_ferret.config import Config
 from git_ferret.gitops import resolve_base_ref
 from git_ferret.models import RepoReport, Status
@@ -17,6 +22,7 @@ from tests.helpers import clone_local, commit, make_repo, run
 
 FRAN = "Fran <fran@z.com>"
 OTHER = "Other <o@x.com>"
+runner = CliRunner()
 
 
 def _repo_with_branches(tmp_path: Path, branches: list[tuple[str, str]]) -> Path:
@@ -248,3 +254,102 @@ def test_the_base_remotes_own_trunk_is_never_a_candidate(tmp_path: Path):
     assert "origin/master" not in names
     assert "origin/main" not in names
     assert "origin/feature" in names
+
+
+@pytest.fixture
+def filtered_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """A merged branch, live branches by two authors, and a whitelisted branch."""
+    src = make_repo(tmp_path / "src")
+    (src / "base.txt").write_text("base\n")
+    commit(src, "base")
+    for name, author in (
+        ("ABC-done", FRAN),
+        ("DEF-open", FRAN),
+        ("ABC-other", OTHER),
+        ("ZZZ-open", FRAN),
+        ("ABC-ignored", FRAN),
+    ):
+        run(src, "checkout", "-b", name, "main")
+        (src / f"{name}.txt").write_text(f"{name}\n")
+        commit(src, f"work on {name}", author=author)
+        run(src, "checkout", "main")
+    run(src, "merge", "--squash", "ABC-done")
+    commit(src, "merge ABC-done")
+    clone = clone_local(src, tmp_path / "clone")
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('author = ["fran@z.com"]\n[whitelist]\npatterns = ["ABC-ignored"]\n')
+    monkeypatch.setattr(config, "DEFAULT_CONFIG_PATH", config_path)
+    return clone
+
+
+def _reported_names(output: str) -> set[str]:
+    return {
+        line.split("`")[1]
+        for line in output.splitlines()
+        if line.startswith("- ") and "`origin/" in line
+    }
+
+
+@pytest.mark.parametrize("command", ["remote", "merged"])
+@pytest.mark.parametrize(
+    ("values", "expected"),
+    [
+        (list[str](), {"origin/ABC-done", "origin/DEF-open", "origin/ZZZ-open"}),
+        (["ABC"], {"origin/ABC-done"}),
+        (["ABC", "DEF"], {"origin/ABC-done", "origin/DEF-open"}),
+        (["ABC,DEF"], {"origin/ABC-done", "origin/DEF-open"}),
+        pytest.param(["BC-do,EF-op"], {"origin/ABC-done", "origin/DEF-open"}, id="substring"),
+        ([" , ABC, ", " DEF,, "], {"origin/ABC-done", "origin/DEF-open"}),
+        (["ABC", "", " , "], {"origin/ABC-done"}),
+        (["", " , "], {"origin/ABC-done", "origin/DEF-open", "origin/ZZZ-open"}),
+        (["ABC,ABC", "ABC"], {"origin/ABC-done"}),
+        (["abc", "missing"], set[str]()),
+    ],
+)
+def test_branch_filters_match_any_pattern(
+    filtered_repo: Path, command: str, values: list[str], expected: set[str]
+):
+    args = [command, str(filtered_repo), "--no-fetch"]
+    for value in values:
+        args.extend(["--branch", value])
+    result = runner.invoke(build_parser(), args)
+    assert result.exit_code == 0, result.output
+    assert _reported_names(result.stdout) == expected
+    assert "\x1b[" not in result.stdout
+    assert result.stdout.count("`origin/ABC-done`") <= 1
+
+
+@pytest.mark.parametrize("command", ["remote", "merged"])
+def test_branch_patterns_combine_with_cli_author_and_override_config(
+    filtered_repo: Path, command: str
+):
+    result = runner.invoke(
+        build_parser(),
+        [command, str(filtered_repo), "--no-fetch", "--branch", "ABC,DEF", "--author", "o@x.com"],
+    )
+    assert result.exit_code == 0, result.output
+    assert _reported_names(result.stdout) == {"origin/ABC-other"}
+
+
+@pytest.mark.parametrize("command", ["remote", "merged"])
+def test_programmatic_single_branch_filter_still_works(
+    filtered_repo: Path, command: str, capsys: pytest.CaptureFixture[str]
+):
+    run_command(command, filtered_repo, True, branch_filter="DEF")
+    assert _reported_names(capsys.readouterr().out) == {"origin/DEF-open"}
+
+
+def test_multiple_patterns_preserve_merge_verdicts_and_unpushed_gate(filtered_repo: Path):
+    args = ["merged", str(filtered_repo), "--no-fetch", "--branch", "ABC", "--branch", "DEF"]
+    result = runner.invoke(build_parser(), args)
+    assert result.exit_code == 0, result.output
+    assert "`origin/ABC-done` [SAFE TO DELETE]" in result.stdout
+    assert "`origin/DEF-open` [NOT MERGED]" in result.stdout
+
+    run(filtered_repo, "checkout", "-b", "ABC-done", "origin/ABC-done")
+    (filtered_repo / "local-only.txt").write_text("unpushed\n")
+    commit(filtered_repo, "local only")
+    result = runner.invoke(build_parser(), args)
+    assert result.exit_code == 0, result.output
+    assert "`origin/ABC-done` [UNSAFE TO DELETE]" in result.stdout
+    assert "`origin/DEF-open` [NOT MERGED]" in result.stdout
