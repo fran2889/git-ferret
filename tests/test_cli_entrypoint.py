@@ -22,6 +22,7 @@ import typer
 
 from git_ferret import __version__, cli
 from git_ferret.config import Config
+from git_ferret.gitcmd import GitUnavailable
 from tests.helpers import commit, make_repo
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -37,6 +38,13 @@ def _main(argv: list[str]) -> int:
     return 0
 
 
+def _hide_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Put an empty directory on PATH so no git can be found."""
+    empty = tmp_path / "empty-bin"
+    empty.mkdir()
+    monkeypatch.setenv("PATH", str(empty))
+
+
 def test_a_successful_run_returns_zero(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
     make_repo(tmp_path / "r")
     assert _main(["local", str(tmp_path)]) == 0
@@ -48,6 +56,63 @@ def test_version_is_printed_without_running_a_scan(capsys: pytest.CaptureFixture
     # and without touching a repository.
     assert _main(["--version"]) == 0
     assert capsys.readouterr().out.strip() == f"git-ferret {__version__}"
+
+
+def test_version_still_works_when_git_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # A broken install is exactly when the version is needed for a bug report,
+    # so the environment check must stay out of the way of `--version`.
+    _hide_git(tmp_path, monkeypatch)
+    assert _main(["--version"]) == 0
+    assert capsys.readouterr().out.strip() == f"git-ferret {__version__}"
+
+
+@pytest.mark.parametrize("command", ["local", "remote", "merged"])
+def test_a_missing_git_is_one_line_and_exit_two(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    command: str,
+):
+    # A scan without git cannot produce a trustworthy report. It must say so
+    # once and stop, rather than traceback or print every repository as stale.
+    make_repo(tmp_path / "r")
+    _hide_git(tmp_path, monkeypatch)
+
+    assert _main([command, str(tmp_path), "--no-fetch"]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "error: cannot run git" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_a_bad_path_is_a_usage_error_even_when_git_cannot_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # Argument validation comes before the environment check: a typo is still a
+    # usage error and exit 1.
+    _hide_git(tmp_path, monkeypatch)
+    assert _main(["local", str(tmp_path / "nope")]) == 1
+    assert "error:" in capsys.readouterr().err
+
+
+def test_git_disappearing_mid_scan_stops_the_run_with_exit_two(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # The per-repository handlers skip a broken repository, so GitUnavailable
+    # must not be one of the errors they catch: a git that vanishes mid-scan has
+    # to stop the run rather than leave a partial report that looks complete.
+    make_repo(tmp_path / "r")
+
+    def vanish(*args: object, **kwargs: object) -> None:
+        raise GitUnavailable("cannot run git")
+
+    monkeypatch.setattr(cli, "analyse_local", vanish)
+    assert _main(["local", str(tmp_path)]) == 2
+    captured = capsys.readouterr()
+    assert "error: cannot run git" in captured.err
+    assert "Traceback" not in captured.err
 
 
 def test_a_missing_path_is_a_usage_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]):

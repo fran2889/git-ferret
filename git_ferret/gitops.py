@@ -23,20 +23,24 @@ BASE_CANDIDATES = ("origin/main", "origin/master", "main", "master")
 
 
 def fetch_all(repo: Path) -> tuple[bool, datetime | None]:
-    """``git fetch --all --prune``, never raising.
+    """``git fetch --all --prune``, returning a failed fetch rather than raising.
 
     ``--all`` rather than a bare fetch because analyses read remote branches
     across every configured remote; fetching only ``origin`` would leave the
     others permanently stale while the tool reported confident verdicts about
     them. Returns ``(success, time_of_last_successful_fetch)``.
 
-    A git that cannot be run at all is a failed fetch like any other: the run
-    carries on and the repository is reported as stale rather than the whole
-    scan dying on one unreachable binary.
+    A fetch that runs past the timeout is a failed fetch like any other: the run
+    carries on and the repository is reported as stale. A git that cannot be
+    executed at all is an environment failure, not a fetch failure, and is left
+    to the run boundary (:func:`git_ferret.gitcmd.require_git`).
     """
     try:
         proc = run_git(repo, "fetch", "--all", "--prune")
     except GitError:
+        # check=False only raises for a timeout; a non-zero exit is handled
+        # below, and a git that cannot run at all is GitUnavailable and must
+        # reach the boundary.
         return False, None
     if proc.returncode != 0:
         return False, None

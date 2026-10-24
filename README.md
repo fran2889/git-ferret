@@ -186,6 +186,9 @@ the report says so, and a warning appears once at the top of the run.
   interpreter that created it. Uninstalling or upgrading that Python makes all of them fail, and
   activating the environment does not help. Rebuild it with `rm -rf .venv && uv sync --locked`, or
   with the pip commands under [Install](#install).
+- **`git` cannot be run.** git-ferret checks that `git` can be executed before it walks the tree. If
+  it cannot, the run prints one line and exits 2 instead of producing a report it cannot trust.
+  Check `git --version` and that the binary is on `PATH`.
 - **The fetch failed.** The repository is still analysed, marked `[UNREACHABLE]`, and the run is
   labelled stale. Check `git -C <repo> remote -v` and retry with
   `git -C <repo> fetch --all --prune`, or use `--no-fetch` deliberately.
@@ -346,6 +349,8 @@ claim, and the output treats it as one.
 
 All three commands fetch (`git fetch --all --prune`) before analysing, so the refs they read are
 current. A failed fetch is never fatal: the repository is still analysed and the failure is reported.
+A `git` that cannot be executed is not a fetch failure: the run stops before reading any repository
+and exits 2.
 
 Once you have a fresh set of refs, repeat runs are cheap and touch no network:
 
@@ -424,7 +429,7 @@ diffing two reports rather than on exit status.
 |---|---|
 | `0` | The run completed. Findings do **not** change this. |
 | `1` | Usage error: unknown command or flag, or a path that is not a directory. |
-| `2` | Reserved for a failure that stopped the run before completing. |
+| `2` | The run could not start or finish: `git` is missing or cannot be executed. |
 
 A repository that cannot be read is reported and skipped, not fatal.
 

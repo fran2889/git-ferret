@@ -10,7 +10,14 @@ from pathlib import Path
 
 import pytest
 
-from git_ferret.gitcmd import GitError, run_git, run_git_text
+from git_ferret.gitcmd import (
+    TIMEOUT_EXIT,
+    GitError,
+    GitUnavailable,
+    require_git,
+    run_git,
+    run_git_text,
+)
 from tests.helpers import commit, make_repo
 
 
@@ -34,17 +41,17 @@ def test_run_git_check_false_does_not_raise(tmp_path: Path):
     assert proc.returncode != 0
 
 
-def test_a_missing_git_binary_is_a_git_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    # Not installed is the obvious case, and it must arrive as the same error
-    # type as any other git failure rather than as a FileNotFoundError that
-    # callers do not know to expect.
+def test_a_missing_git_binary_is_git_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # A missing binary is an environment failure, not a repository one: it must
+    # not arrive as the GitError that per-repository handlers skip.
     def missing(*args: object, **kwargs: object) -> None:
         raise FileNotFoundError(2, "No such file or directory", "git")
 
     monkeypatch.setattr("git_ferret.gitcmd.subprocess.run", missing)
-    with pytest.raises(GitError) as exc:
+    with pytest.raises(GitUnavailable) as exc:
         run_git(tmp_path, "status")
-    assert "git status failed" in str(exc.value)
+    assert "cannot run git" in str(exc.value)
+    assert not isinstance(exc.value, GitError)
 
 
 def test_a_git_timeout_is_a_git_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -57,6 +64,38 @@ def test_a_git_timeout_is_a_git_error(tmp_path: Path, monkeypatch: pytest.Monkey
     with pytest.raises(GitError) as exc:
         run_git(tmp_path, "fetch")
     assert "timed out" in str(exc.value)
+    assert exc.value.returncode == TIMEOUT_EXIT
+
+
+def test_require_git_reports_the_installed_version():
+    assert require_git().startswith("git version ")
+
+
+def test_a_git_that_cannot_report_its_version_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    def broken(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=["git", "--version"], returncode=1, stdout="", stderr="boom"
+        )
+
+    monkeypatch.setattr("git_ferret.gitcmd.subprocess.run", broken)
+    with pytest.raises(GitUnavailable) as exc:
+        require_git()
+    assert "boom" in str(exc.value)
+
+
+def test_a_probe_that_hangs_is_unavailable(monkeypatch: pytest.MonkeyPatch):
+    # `git --version` is not a slow repository operation. A hang there is a
+    # broken installation and must not keep the user waiting for the fetch
+    # timeout.
+    def timed_out(*args: object, **kwargs: object) -> None:
+        raise subprocess.TimeoutExpired(cmd="git", timeout=1)
+
+    monkeypatch.setattr("git_ferret.gitcmd.subprocess.run", timed_out)
+    with pytest.raises(GitUnavailable) as exc:
+        require_git()
+    assert "did not respond" in str(exc.value)
 
 
 def test_run_git_decodes_utf8_under_an_ascii_locale(tmp_path: Path):
