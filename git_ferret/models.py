@@ -135,6 +135,10 @@ class RepoReport:
     fetched_at: datetime | None = None
     fetch_failed: bool = False
     fetch_attempted: bool = True
+    # Whether the repository has a remote at all. A local-only repository has
+    # nothing to refresh, so it is never "stale"; it already says so with its
+    # own [UNREACHABLE] finding.
+    has_remote: bool = True
     skipped_reason: str | None = None
     worktrees: list[WorktreeInfo] = field(default_factory=list[WorktreeInfo])
     findings: list[Finding] = field(default_factory=list[Finding])
@@ -146,5 +150,11 @@ class RepoReport:
         True whenever no fetch was attempted (``--no-fetch``) or the attempt
         failed. A repository that was never fetched is a different case from one
         fetched seconds ago, and both differ from one holding month-old refs.
+
+        False for a repository with no remote: there is nothing that could have
+        been refreshed, and counting it would inflate a warning that exists to
+        flag state which could be out of date.
         """
+        if not self.has_remote:
+            return False
         return not self.fetch_attempted or self.fetch_failed or self.fetched_at is None

@@ -27,6 +27,9 @@ def report_remote_health(repo: Path, report: RepoReport) -> None:
     the one place a fetch happened.
     """
     remotes = run_git(repo, "remote").stdout.split()
+    # Recorded on the report so staleness can tell a local-only repository
+    # (nothing to refresh, so never stale) from one whose fetch failed.
+    report.has_remote = bool(remotes)
     if not remotes:
         report.findings.append(
             Finding(
