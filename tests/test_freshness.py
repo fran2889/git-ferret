@@ -20,7 +20,7 @@ from git_ferret.config import Config
 from git_ferret.gitcmd import GitError
 from git_ferret.gitops import resolve_base_ref
 from git_ferret.models import RepoReport
-from tests.helpers import commit, make_repo, run
+from tests.helpers import clone_local, commit, make_repo, run
 
 
 def _upstream_with_squash_merged(tmp_path: Path):
@@ -139,10 +139,12 @@ def test_stale_warning_counts_only_repositories_that_were_analysed(
     # A repository whose analysis failed produced no section, so it cannot be
     # counted stale or fresh. The footer divides analysed repositories, not
     # discovered ones, and the failed one is already on stderr.
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    scan = tmp_path / "scan"
     for name in ("a", "b"):
-        repo = make_repo(tmp_path / name)
-        (repo / "f.txt").write_text("a\n")
-        commit(repo, "base")
+        clone_local(src, scan / name)
 
     real_analyse = cli_module.analyse_local
 
@@ -153,7 +155,7 @@ def test_stale_warning_counts_only_repositories_that_were_analysed(
 
     monkeypatch.setattr(cli_module, "analyse_local", fail_on_b)
 
-    run_command("local", tmp_path, True, [], None)
+    run_command("local", scan, True, [], None)
     captured = capsys.readouterr()
 
     assert "1 of 1 repositories" in captured.out

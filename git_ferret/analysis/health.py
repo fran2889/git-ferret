@@ -21,12 +21,17 @@ from git_ferret.models import Finding, RepoReport, Status
 def report_remote_health(repo: Path, report: RepoReport) -> None:
     """Append an ``[UNREACHABLE]`` finding when the remote is missing or failed.
 
-    Under ``--no-fetch`` no probe is made, so a server-deleted project is
+    Also records whether a remote exists, because staleness is defined relative
+    to one that could have been refreshed: a local-only repository is never
+    stale. Under ``--no-fetch`` no probe is made, so a server-deleted project is
     undetectable and must not be implied either way; only a missing remote is
     reported then. The fetch failure is read from *report*, so the caller owns
     the one place a fetch happened.
     """
     remotes = run_git(repo, "remote").stdout.split()
+    # Recorded on the report so staleness can tell a local-only repository
+    # (nothing to refresh, so never stale) from one whose fetch failed.
+    report.has_remote = bool(remotes)
     if not remotes:
         report.findings.append(
             Finding(
