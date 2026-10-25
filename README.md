@@ -341,8 +341,9 @@ fetched 2026-10-16 09:41:02 · base: origin/main
 When any repository was read without a successful fetch this run, a warning appears once at the end
 of the report. It is a footer rather than a header because repositories are fetched one at a time as
 their analysis starts, so the count is not known until the last one has been read. A repository with
-no remote is not counted: there is nothing it could have refreshed, and its own `[UNREACHABLE]` line
-already says so.
+no remote is not counted as stale: there is nothing it could have refreshed, and its own
+`[UNREACHABLE]` line already says so. It still counts toward the total, so `1 of 2` means one stale
+repository among the two examined.
 
 The base branch is always `origin/main` (or `origin/master`) when that exists, not your local copy.
 A local `main` forty commits behind would report live branches as unmerged and send you deleting
