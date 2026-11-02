@@ -180,12 +180,15 @@ A run over a directory of real repositories should print a report and exit 0.
 
 Most problems are in the install or the fetch, not the scan. If a report looks wrong, read the
 `fetched ...` line on the repository first: when a repository was read without a successful fetch,
-the report says so, and a warning appears once at the top of the run.
+the report says so, and a warning appears once at the end of the report.
 
 - **The virtual environment broke.** Every script in `.venv/bin` records the absolute path of the
   interpreter that created it. Uninstalling or upgrading that Python makes all of them fail, and
   activating the environment does not help. Rebuild it with `rm -rf .venv && uv sync --locked`, or
   with the pip commands under [Install](#install).
+- **`git` cannot be run.** git-ferret checks that `git` can be executed before it walks the tree. If
+  it cannot, the run prints one line and exits 2 instead of producing a report it cannot trust.
+  Check `git --version` and that the binary is on `PATH`.
 - **The fetch failed.** The repository is still analysed, marked `[UNREACHABLE]`, and the run is
   labelled stale. Check `git -C <repo> remote -v` and retry with
   `git -C <repo> fetch --all --prune`, or use `--no-fetch` deliberately.
@@ -198,9 +201,9 @@ the report says so, and a warning appears once at the top of the run.
   local `main` at the commit you want as the base, or add the remote ref (`origin/main`) it should
   use. Inspect what exists with `git -C <repo> branch -a` and `git -C <repo> remote show origin`.
 - **A Windows console cannot render the report.** Git output is decoded as UTF-8, and the report is
-  written in the destination's encoding; a glyph that cannot be encoded is replaced, so the
-  bracketed marker still carries the meaning. Windows Terminal handles it; in a legacy console,
-  `chcp 65001` switches the code page.
+  always written as UTF-8, so a redirected file keeps every emoji and branch name. A legacy console
+  may still draw an emoji badly, but the bracketed marker carries the meaning either way. Windows
+  Terminal handles it, and `chcp 65001` switches a legacy console's code page.
 
 If none of these explains what you see, open an issue with the bug report template. Include the
 output of `git-ferret --version`, `python --version`, and `git --version`, the exact command, and
@@ -345,7 +348,9 @@ every repository carries the time of its last successful fetch:
 fetched 2026-10-16 09:41:02 · base: origin/main
 ```
 
-When any repository was read without a successful fetch this run, a warning appears once at the top.
+When any repository was read without a successful fetch this run, a warning appears once at the end
+of the report. It is a footer rather than a header because repositories are fetched one at a time as
+their analysis starts, so the count is not known until the last one has been read.
 
 The base branch is always `origin/main` (or `origin/master`) when that exists, not your local copy.
 A local `main` forty commits behind would report live branches as unmerged and send you deleting
@@ -356,6 +361,8 @@ claim, and the output treats it as one.
 
 All three commands fetch (`git fetch --all --prune`) before analysing, so the refs they read are
 current. A failed fetch is never fatal: the repository is still analysed and the failure is reported.
+A `git` that cannot be executed is not a fetch failure: the run stops before reading any repository
+and exits 2.
 
 Once you have a fresh set of refs, repeat runs are cheap and touch no network:
 
@@ -386,6 +393,9 @@ A branch matching the whitelist is hidden from `local` **only when it is clean**
 branch with unpushed commits or a dirty worktree still shows up. For `remote` and `merged` it is
 ignored outright.
 
+A file that cannot be parsed, or whose values have the wrong shape, is reported as a usage error
+naming the file rather than as a traceback.
+
 Identity resolves in this order, first match wins:
 
 1. `--author` on the command line (repeatable, or comma-separated)
@@ -402,8 +412,8 @@ $ git-ferret local ~/src > report.md
 
 No ANSI escapes and no tables ever reach the file. Emoji are decorative only: the bracketed
 marker always carries the meaning on its own, so a terminal without an emoji font loses nothing.
-Git output is decoded as UTF-8 regardless of the console code page, and a glyph the destination
-cannot encode is replaced rather than failing the run.
+Git output is decoded as UTF-8 regardless of the console code page, and the report is written as
+UTF-8 too, so redirecting it is lossless rather than limited to the console's code page.
 
 | Marker | Meaning |
 |---|---|
@@ -433,8 +443,8 @@ diffing two reports rather than on exit status.
 | Exit code | Meaning |
 |---|---|
 | `0` | The run completed. Findings do **not** change this. |
-| `1` | Usage error: unknown command or flag, or a path that is not a directory. |
-| `2` | Reserved for a failure that stopped the run before completing. |
+| `1` | Usage error: unknown command or flag, a path that is not a directory, or an unusable config file. |
+| `2` | The run could not start or finish: `git` could not be run, or an unexpected error stopped it before the report finished. |
 
 A repository that cannot be read is reported and skipped, not fatal.
 

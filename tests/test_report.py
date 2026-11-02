@@ -10,7 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from git_ferret.models import Finding, RepoReport, Status
-from git_ferret.report import emit, render_header, render_repo, render_report
+from git_ferret.report import (
+    emit,
+    render_header,
+    render_repo,
+    render_report,
+    render_stale_warning,
+)
 
 
 def _repo(**kwargs: Any) -> RepoReport:
@@ -225,9 +231,9 @@ def test_a_repo_that_was_never_fetched_is_not_called_empty():
     assert "never fetched" in out
 
 
-def test_stale_warning_is_separated_from_the_first_repo():
+def test_stale_warning_is_separated_from_the_last_repo():
     out = render_report([_repo()], stale_count=1)
-    assert "this run)\n\n## /tmp/api" in out
+    assert "base: origin/main\n\n> " in out
 
 
 def test_repo_heading_is_relative_to_the_scan_root():
@@ -269,10 +275,24 @@ def test_streaming_one_repository_at_a_time_equals_the_whole_document():
     api.findings.append(Finding(branch="feat/x", status=Status.NOT_PUSHED))
     web = RepoReport(path=Path("/tmp/web"), base_ref=None, skipped_reason="no base branch")
 
-    streamed = render_header(stale_count=0, total=2)
+    streamed = render_header()
     streamed += render_repo(api, root=Path("/tmp")) + render_repo(web, root=Path("/tmp"))
+    streamed += render_stale_warning(stale_count=0, total=2)
 
     assert streamed.rstrip() + "\n" == render_report([api, web], stale_count=0, root=Path("/tmp"))
+
+
+def test_streaming_a_stale_report_equals_the_whole_document():
+    # The footer is part of the document, so its spacing has to survive the
+    # streaming path too, not only the batched renderer.
+    api = _repo()
+    api.findings.append(Finding(branch="feat/x", status=Status.NOT_PUSHED))
+
+    streamed = render_header()
+    streamed += render_repo(api, root=Path("/tmp"))
+    streamed += render_stale_warning(stale_count=1, total=1)
+
+    assert streamed.rstrip() + "\n" == render_report([api], stale_count=1, root=Path("/tmp"))
 
 
 def test_screen_keeps_the_fetch_line_directly_under_the_title():
@@ -307,12 +327,20 @@ def test_screen_shows_a_skip_reason_where_the_file_does():
     assert lines[2] == ""
 
 
-def test_screen_keeps_the_document_title_apart_from_the_stale_warning():
+def test_screen_keeps_the_document_title_apart_from_the_first_repo():
     # Only a repository title hugs the line beneath it; the document title is
-    # not a header for the warning and keeps its blank line.
-    lines = _on_screen(render_header(stale_count=1, total=3))
+    # not a header for the first repository and keeps its blank line.
+    lines = _on_screen(render_header())
     assert lines[0].strip() == "git-ferret"
     assert lines[1] == ""
+
+
+def test_screen_shows_the_stale_warning_after_the_report():
+    lines = _on_screen(render_repo(_repo()), render_stale_warning(stale_count=1, total=3))
+    assert any("1 of 3 repositories" in line for line in lines)
+    assert lines.index("/tmp/api") < next(
+        index for index, line in enumerate(lines) if "1 of 3 repositories" in line
+    )
 
 
 def test_a_failed_fetch_with_a_timestamp_names_the_state_it_read():
@@ -329,52 +357,9 @@ def _strict_stream(encoding: str) -> tuple[io.TextIOWrapper, io.BytesIO]:
     return io.TextIOWrapper(raw, encoding=encoding, errors="strict", newline=""), raw
 
 
-class _StrictTerminal(io.TextIOWrapper):
-    """A strict stream that claims to be a terminal, so ``emit`` uses rich."""
-
-    def isatty(self) -> bool:
-        return True
-
-
-def _terminal(encoding: str) -> tuple[_StrictTerminal, io.BytesIO]:
-    raw = io.BytesIO()
-    return _StrictTerminal(raw, encoding=encoding, errors="strict", newline=""), raw
-
-
-def test_emit_survives_a_stream_that_cannot_encode_emoji():
-    # Windows consoles and redirected output can be cp1252 or ASCII. The
-    # report must still be written, because the bracketed marker carries the
-    # meaning; the emoji is decoration.
-    rep = _repo()
-    rep.findings.append(Finding(branch="feat/x", status=Status.NOT_PUSHED))
-    stream, raw = _strict_stream("ascii")
-
-    emit(render_repo(rep), stream)
-    stream.flush()
-
-    output = raw.getvalue().decode("ascii")
-    assert "`feat/x` [NOT PUSHED]" in output
-    assert "## /tmp/api" in output
-    assert "⬆" not in output
-
-
-def test_emit_survives_a_terminal_that_cannot_encode_emoji():
-    # rich adds bullet glyphs of its own, so the TTY path needs the same guard
-    # as a redirected stream rather than only sanitising the report text.
-    rep = _repo()
-    rep.findings.append(Finding(branch="feat/x", status=Status.NOT_PUSHED))
-    stream, raw = _terminal("ascii")
-
-    emit(render_repo(rep), stream)
-    stream.flush()
-
-    output = re.sub(r"\x1b\[[0-9;]*m", "", raw.getvalue().decode("ascii"))
-    assert "feat/x [NOT PUSHED]" in output
-    assert "/tmp/api" in output
-    assert "⬆" not in output
-
-
 def test_emit_leaves_utf8_output_untouched():
+    # The entry point configures its streams as UTF-8, so emit writes text
+    # unchanged rather than trying to encode it to the console's code page.
     stream, raw = _strict_stream("utf-8")
     text = "⬆️ `b` [NOT PUSHED]\n"
     emit(text, stream)

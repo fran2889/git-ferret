@@ -5,6 +5,9 @@
 
 from pathlib import Path
 
+import pytest
+
+from git_ferret.gitcmd import GitUnavailable
 from git_ferret.gitops import (
     base_ref_is_remote,
     fetch_all,
@@ -79,6 +82,18 @@ def test_fetch_failure_is_not_fatal(tmp_path: Path):
     run(repo, "remote", "add", "origin", "/nonexistent/path.git")
     ok, when = fetch_all(repo)
     assert ok is False and when is None
+
+
+def test_fetch_all_does_not_swallow_a_missing_git(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    # A git that cannot run is an environment failure, not a failed fetch: it
+    # has to reach the run boundary so the CLI exits 2 instead of claiming every
+    # repository was merely stale.
+    def missing(*args: object, **kwargs: object) -> None:
+        raise GitUnavailable("cannot run git")
+
+    monkeypatch.setattr("git_ferret.gitops.run_git", missing)
+    with pytest.raises(GitUnavailable):
+        fetch_all(tmp_path)
 
 
 def test_fetch_success_records_fetch_head_mtime(tmp_path: Path):

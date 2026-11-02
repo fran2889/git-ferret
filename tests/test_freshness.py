@@ -13,8 +13,11 @@ from pathlib import Path
 
 import pytest
 
+from git_ferret import cli as cli_module
 from git_ferret.analysis.merged import merge_verdict
 from git_ferret.cli import run_command
+from git_ferret.config import Config
+from git_ferret.gitcmd import GitError
 from git_ferret.gitops import resolve_base_ref
 from git_ferret.models import RepoReport
 from tests.helpers import commit, make_repo, run
@@ -128,3 +131,31 @@ def test_missing_path_is_a_usage_error(tmp_path: Path):
 def test_report_records_whether_fetch_was_attempted():
     r = RepoReport(path=Path("/tmp/r"), base_ref="origin/main", fetch_attempted=False)
     assert r.fetch_attempted is False
+
+
+def test_stale_warning_counts_only_repositories_that_were_analysed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+):
+    # A repository whose analysis failed produced no section, so it cannot be
+    # counted stale or fresh. The footer divides analysed repositories, not
+    # discovered ones, and the failed one is already on stderr.
+    for name in ("a", "b"):
+        repo = make_repo(tmp_path / name)
+        (repo / "f.txt").write_text("a\n")
+        commit(repo, "base")
+
+    real_analyse = cli_module.analyse_local
+
+    def fail_on_b(repo: Path, config: Config, base_ref: str | None) -> RepoReport:
+        if repo.name == "b":
+            raise GitError(["status"], 128, "boom")
+        return real_analyse(repo, config, base_ref)
+
+    monkeypatch.setattr(cli_module, "analyse_local", fail_on_b)
+
+    run_command("local", tmp_path, True, [], None)
+    captured = capsys.readouterr()
+
+    assert "1 of 1 repositories" in captured.out
+    assert "## b" not in captured.out
+    assert "error analysing" in captured.err

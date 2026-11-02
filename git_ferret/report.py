@@ -18,10 +18,9 @@ repository from the next.
 
 from __future__ import annotations
 
-import io
 import sys
 from pathlib import Path
-from typing import IO, TextIO, cast
+from typing import TextIO
 
 from git_ferret.models import Finding, RepoReport
 
@@ -123,26 +122,32 @@ def render_repo(report: RepoReport, root: Path | None = None) -> str:
     return _block(lines)
 
 
-def render_header(stale_count: int, total: int) -> str:
-    """The document title, plus the staleness warning when one is warranted.
+def render_header() -> str:
+    """The document title, as a block separated from the first repository."""
+    return _block(["# git-ferret"])
 
-    The warning appears exactly once at the top, and fires when *any*
-    repository was read from stale local state: one stale repo among thirty is
-    exactly the case worth mentioning, and a warning that only fired when every
-    repo was stale would miss it.
 
-    *total* is a parameter rather than derived from a report list so a
-    streaming caller, which holds one repository at a time, can still say how
-    many the warning is about.
+def render_stale_warning(stale_count: int, total: int) -> str:
+    """The stale-state warning, printed once after the report.
+
+    It sits at the end rather than the top because repositories are fetched one
+    at a time as their analysis starts: the count is not knowable until the last
+    one has been read, and printing it early would mean delaying every result
+    behind every fetch. Each repository's heading still carries its own
+    timestamp, so the detail is available without reaching the footer.
+
+    A run that is interrupted, or that fails before the last repository, never
+    reaches this line. That is acceptable because the per-repository headings
+    carry the same state; the warning only aggregates what they already say.
     """
-    lines = ["# git-ferret"]
-    if stale_count:
-        lines += [
-            "",
+    if not stale_count:
+        return ""
+    return _block(
+        [
             f"> {WARNING_EMOJI}  {stale_count} of {total} repositories "
             f"analysed from stale local state (no successful fetch this run)",
         ]
-    return _block(lines)
+    )
 
 
 def render_report(reports: list[RepoReport], stale_count: int, root: Path | None = None) -> str:
@@ -153,7 +158,9 @@ def render_report(reports: list[RepoReport], stale_count: int, root: Path | None
     newline rather than with a separator.
     """
     body = "".join(render_repo(report, root) for report in reports)
-    return (render_header(stale_count, len(reports)) + body).rstrip() + "\n"
+    return (
+        render_header() + body + render_stale_warning(stale_count, len(reports))
+    ).rstrip() + "\n"
 
 
 def _split_heading(text: str) -> tuple[str, str]:
@@ -171,71 +178,22 @@ def _split_heading(text: str) -> tuple[str, str]:
     return "", text
 
 
-def _encodable(text: str, out: TextIO) -> str:
-    """*text* as *out* can write it.
-
-    A redirected stream on Windows can be cp1252 or ASCII, and the report
-    carries emoji. The bracketed marker is what means something, so replacing
-    an unrepresentable glyph is better than failing the whole run with
-    ``UnicodeEncodeError``.
-    """
-    encoding = getattr(out, "encoding", None)
-    if not encoding:
-        return text
-    try:
-        text.encode(encoding)
-    except LookupError:
-        return text
-    except UnicodeEncodeError:
-        return text.encode(encoding, errors="replace").decode(encoding, errors="replace")
-    return text
-
-
-class _EncodableStream(io.TextIOBase):
-    """A write-only view of *stream* that cannot raise ``UnicodeEncodeError``.
-
-    Rich adds its own bullet characters after the report text is built, so
-    sanitising the text alone is not enough: every write passes through
-    :func:`_encodable`, including the decoration rich contributes.
-    """
-
-    # ``TextIOBase.encoding`` is read-only and ``None`` on the runtime base,
-    # so the wrapped stream's encoding is copied onto the instance.
-    encoding: str = "utf-8"
-
-    def __init__(self, stream: TextIO) -> None:
-        self._stream = stream
-        self.encoding = getattr(stream, "encoding", None) or "utf-8"
-
-    def write(self, text: str) -> int:
-        return self._stream.write(_encodable(text, self._stream))
-
-    def flush(self) -> None:
-        self._stream.flush()
-
-    def isatty(self) -> bool:
-        return self._stream.isatty()
-
-    def fileno(self) -> int:
-        return self._stream.fileno()
-
-
 def emit(text: str, stream: TextIO | None = None) -> None:
     """Write *text*, richly only when the destination is a terminal.
 
     Piping must yield clean markdown, so styling is confined to the TTY path.
+    The entry point reconfigures its streams to UTF-8, so this writes the text
+    as-is rather than degrading characters the stream cannot encode.
     """
     out = stream if stream is not None else sys.stdout
     if not getattr(out, "isatty", lambda: False)():
-        out.write(_encodable(text, out))
+        out.write(text)
         return
 
     from rich.console import Console
     from rich.markdown import Markdown
 
-    # ``TextIOBase`` is not nominally an ``IO[str]`` in typeshed; the proxy
-    # implements the writes rich performs and nothing else.
-    console = Console(file=cast(IO[str], _EncodableStream(out)), force_terminal=True)
+    console = Console(file=out, force_terminal=True)
     title, body = _split_heading(text)
     if title:
         console.print(Markdown(title))

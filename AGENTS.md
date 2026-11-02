@@ -52,8 +52,9 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
   only in `report.emit` when stdout is a TTY.
 - Emoji are decorative. The bracketed marker (`[NOT PUSHED]`, `[SAFE TO DELETE]`) carries the
   meaning on its own. Never move information into the emoji.
-- Findings never change the exit code. `0` means the run completed; `1` is a usage error; `2` is
-  reserved. Do not turn a finding into a failing exit code.
+- Findings never change the exit code. `0` means the run completed; `1` is a usage error; `2` is a
+  run that could not start or finish, for example because `git` cannot be executed or a config file
+  cannot be read. Do not turn a finding into a failing exit code.
 - Python 3.14 or newer, and git 2.38 or newer because the merge test uses
   `merge-tree --write-tree`.
 - Existing README promises must keep holding: read-only behaviour, exit codes, and markdown output.
@@ -91,7 +92,8 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
 - Coverage is measured over `git_ferret/` with a floor of 95 in `pyproject.toml`. Do not duplicate
   an existing test just to move the number; cover a distinct path or a distinct failure mode.
 - The suite runs on Linux, macOS, and Windows. Keep subprocess decoding on UTF-8, build paths with
-  `pathlib` rather than joining strings with `/`, and remember that a console may not render emoji.
+  `pathlib` rather than joining strings with `/`, and let the entry point own the output encoding:
+  the CLI reconfigures its streams to UTF-8 rather than the console code page.
 - New scripts under `scripts/` need unit tests too. `scripts/check_commit_msg.py` runs on every
   commit, so its edge cases matter.
 

@@ -29,12 +29,18 @@ from git_ferret.analysis.remote import (
     analyse_merged_candidates,
     analyse_remote,
 )
-from git_ferret.config import Config, resolve_identities
+from git_ferret.config import Config, ConfigError, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
-from git_ferret.gitcmd import GitError, run_git
-from git_ferret.gitops import fetch_all, refs_updated_at, resolve_base_ref
+from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
+from git_ferret.gitops import fetch_all, resolve_base_ref
 from git_ferret.models import RepoReport
-from git_ferret.report import display_path, emit, render_header, render_repo
+from git_ferret.report import (
+    display_path,
+    emit,
+    render_header,
+    render_repo,
+    render_stale_warning,
+)
 
 app = typer.Typer(help="Audit many local git repositories at once. Reports only.")
 
@@ -106,31 +112,35 @@ def local(
     """Branches checked out locally, worktrees, dirty state."""
     config = Config.load()
     root = _resolve_root(path)
+    require_git()
     updated: list[tuple[Path, str]] = []
 
     repos = discover_repos(root)
-    # Fetch every repository before writing anything. The stale warning names
-    # how many of how many this run could not refresh, and that count is only
-    # knowable once every fetch has been attempted; deciding it from the first
-    # repository reported "1 of 1" for any run and missed a stale repo that was
-    # not first.
-    fetch_state = _fetch_every(repos, no_fetch)
-    emit(render_header(*_stale_counts(repos, fetch_state)))
+    stale = analysed = 0
+    # The title is all that can be said before the first fetch: repositories
+    # are fetched as their analysis starts, so partial results appear as soon
+    # as the first repository is ready. The stale count is a footer.
+    emit(render_header())
 
     for repo in repos:
+        fetch = _fetch_report(repo, no_fetch)
         base_ref = resolve_base_ref(repo)
         try:
             report = analyse_local(repo, config, base_ref)
         except (GitError, OSError, subprocess.SubprocessError) as exc:
             _warn(f"error analysing {repo}: {exc}")
             continue
-        _stamp_fetch(report, fetch_state[repo])
+        _stamp_fetch(report, fetch)
         report_remote_health(repo, report)
+        analysed += 1
+        if report.is_stale:
+            stale += 1
         if update:
             updated.extend((repo, branch) for branch in fast_forward_worktrees(repo))
         emit(render_repo(report, root))
 
     _emit_summary(updated, root)
+    _emit_footer(stale, analysed)
 
 
 @app.command()
@@ -175,14 +185,15 @@ class UsageError(Exception):
 
 
 # Everything the entry point treats as "you typed it wrong": the tool's own
-# error, plus the framework's. typer has exposed its own exception hierarchy
-# since 0.27.2 -- the floor in pyproject.toml -- so an unknown flag or command
-# arrives as typer's, not click's, and an `except` clause written against
-# click's classes misses it entirely: the error escapes unhandled and the user
-# gets a traceback for a typo. Both stringify to the message the user needs,
-# which is why one handler covers them.
+# errors (bad usage, unusable config), plus the framework's. typer has exposed
+# its own exception hierarchy since 0.27.2 -- the floor in pyproject.toml -- so
+# an unknown flag or command arrives as typer's, not click's. An `except` clause
+# written against click's classes would miss it entirely: the error escapes
+# unhandled and the user gets a traceback for a typo. Both stringify to the
+# message the user needs, which is why one handler covers them.
 _USAGE_ERRORS: tuple[type[Exception], ...] = (
     UsageError,
+    ConfigError,
     typer.TyperException,
     click.ClickException,
 )
@@ -221,34 +232,9 @@ def _fetch_report(repo: Path, no_fetch: bool) -> tuple[bool, bool]:
     return True, not ok
 
 
-def _fetch_every(repos: list[Path], no_fetch: bool) -> dict[Path, tuple[bool, bool]]:
-    """Fetch every repository, so the header can describe the whole run."""
-    return {repo: _fetch_report(repo, no_fetch) for repo in repos}
-
-
 def _stamp_fetch(report: RepoReport, fetch: tuple[bool, bool]) -> None:
     """Record the run's fetch outcome on *report*, for the heading and warning."""
     report.fetch_attempted, report.fetch_failed = fetch
-
-
-def _stale_counts(repos: list[Path], fetch_state: dict[Path, tuple[bool, bool]]) -> tuple[int, int]:
-    """``(stale, total)`` for the top warning, over the whole run.
-
-    Staleness is the report's own rule (nothing refreshed this run), evaluated
-    from the fetch outcome and the on-disk refs rather than from any one
-    repository's heading.
-    """
-    stale = sum(
-        1
-        for repo in repos
-        if RepoReport(
-            path=repo,
-            fetch_attempted=fetch_state[repo][0],
-            fetch_failed=fetch_state[repo][1],
-            fetched_at=refs_updated_at(repo),
-        ).is_stale
-    )
-    return stale, len(repos)
 
 
 def _run(
@@ -260,14 +246,16 @@ def _run(
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
+    require_git()
 
     repos = discover_repos(root)
-    # Fetch every repository first (see `local`): the stale warning's count is a
-    # property of the run, not of whichever repository happens to be first.
-    fetch_state = _fetch_every(repos, no_fetch)
-    emit(render_header(*_stale_counts(repos, fetch_state)))
+    stale = analysed = 0
+    # Fetch each repository as its turn comes (see `local`): results stream as
+    # each one is ready rather than waiting for every fetch to finish.
+    emit(render_header())
 
     for repo in repos:
+        fetch = _fetch_report(repo, no_fetch)
         # Base ref resolved AFTER the fetch above. Resolving first would judge a
         # branch against a local `main` that this run's own fetch is about to
         # supersede, reporting live branches as unmerged.
@@ -278,9 +266,14 @@ def _run(
         except (GitError, OSError, subprocess.SubprocessError) as exc:
             _warn(f"error analysing {repo}: {exc}")
             continue
-        _stamp_fetch(report, fetch_state[repo])
+        _stamp_fetch(report, fetch)
         report_remote_health(repo, report)
+        analysed += 1
+        if report.is_stale:
+            stale += 1
         emit(render_repo(report, root))
+
+    _emit_footer(stale, analysed)
 
 
 def run_command(
@@ -299,6 +292,8 @@ def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:
 
     No marker on these lines: the section says what they are, and a status
     marker here would be a judgement about work that was simply done as asked.
+    The block ends with the blank line the report uses between sections, so a
+    footer appended after it does not sit on the last fast-forward line.
     """
     if not updated:
         return
@@ -306,7 +301,20 @@ def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:
     lines += [
         f"- {display_path(repo, root)}: `{branch}` fast-forwarded" for repo, branch in updated
     ]
-    emit("\n".join(lines) + "\n")
+    emit("\n".join(lines) + "\n\n")
+
+
+def _emit_footer(stale: int, analysed: int) -> None:
+    """Print the run's stale summary, or nothing when every repository was fresh.
+
+    *analysed* counts repositories that produced a report, not repositories
+    discovered: one whose analysis failed was never read, so it can be neither
+    stale nor part of the total the warning divides. The empty case is skipped
+    rather than emitted as an empty block, because ``emit`` adds a trailing
+    blank line on a terminal even for empty text.
+    """
+    if stale:
+        emit(render_stale_warning(stale, analysed))
 
 
 def fast_forward_worktrees(repo: Path) -> list[str]:
@@ -351,12 +359,39 @@ def fast_forward_worktrees(repo: Path) -> list[str]:
     return updated
 
 
+def _configure_output() -> None:
+    """Write the report as UTF-8 even where the console defaults otherwise.
+
+    The report uses emoji markers and quotes branch names and repository paths.
+    A redirected stream on Windows encodes cp1252, so the first marker would
+    raise ``UnicodeEncodeError``; a POSIX stream under ``LANG=C`` has the same
+    problem with ASCII. Contributors and issues are UTF-8, so state that for
+    both streams rather than degrading the text to the console's code page.
+
+    ``errors="replace"`` is the backstop for a POSIX path whose bytes are not
+    UTF-8: git output is already decoded leniently, but a directory name is
+    not, and losing one glyph beats losing the run.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except OSError, ValueError:
+            # Detached or already-closed stream: nothing to configure.
+            continue
+
+
 def main() -> None:
     """Entry point.
 
     Everything this tool considers a usage problem -- a bad flag, an unknown
-    command, a path that is not a directory -- is one line on stderr and exit
-    1. Findings never change the exit code.
+    command, a path that is not a directory, an unusable config file -- is one
+    line on stderr and exit 1. A failure that stops the run before it finishes
+    is one line and exit 2. A git that cannot be executed is one of those
+    failures rather than a finding, because the scan never produced a report
+    anyone could trust. Findings themselves never change the exit code.
 
     ``standalone_mode=False`` is what makes that possible: it hands the
     framework's errors over instead of letting it print and exit itself. Without
@@ -368,14 +403,27 @@ def main() -> None:
     typer returns it -- the command's own return value, or the code of any
     ``typer.Exit`` it raised -- so the return value is what has to be read here.
     """
+    _configure_output()
     try:
         code = app(standalone_mode=False)
     except _USAGE_ERRORS as exc:
         _warn(f"error: {exc}")
         raise SystemExit(1) from None
+    except GitUnavailable as exc:
+        # The documented meaning of 2: the run stopped before it could
+        # complete. Git disappearing mid-scan reaches this too, because the
+        # per-repository handlers deliberately do not catch it.
+        _warn(f"error: {exc}")
+        raise SystemExit(2) from None
     except typer.Abort:
         _warn("aborted")
         raise SystemExit(1) from None
+    # Anything else is an environment failure or a bug: the run could not
+    # complete. That is the documented meaning of exit 2, and it is what tells
+    # a crash apart from a usage error for anything scripting this tool.
+    except Exception as exc:
+        _warn(f"error: {exc}")
+        raise SystemExit(2) from None
     # Every command is annotated `-> None`, so a return value here is the exit
     # code of a `typer.Exit` a command raised deliberately. Anything else is a
     # successful run.

@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from git_ferret.gitcmd import run_git, run_git_text
+from git_ferret.gitcmd import GitError, run_git, run_git_text
 from git_ferret.models import BranchInfo
 
 # Tried in order. The remote-tracking ref wins because `merged` recommends
@@ -23,14 +23,25 @@ BASE_CANDIDATES = ("origin/main", "origin/master", "main", "master")
 
 
 def fetch_all(repo: Path) -> tuple[bool, datetime | None]:
-    """``git fetch --all --prune``, never raising.
+    """``git fetch --all --prune``, returning a failed fetch rather than raising.
 
     ``--all`` rather than a bare fetch because analyses read remote branches
     across every configured remote; fetching only ``origin`` would leave the
     others permanently stale while the tool reported confident verdicts about
     them. Returns ``(success, time_of_last_successful_fetch)``.
+
+    A fetch that runs past the timeout is a failed fetch like any other: the run
+    carries on and the repository is reported as stale. A git that cannot be
+    executed at all is an environment failure, not a fetch failure, and is left
+    to the run boundary (:func:`git_ferret.gitcmd.require_git`).
     """
-    proc = run_git(repo, "fetch", "--all", "--prune")
+    try:
+        proc = run_git(repo, "fetch", "--all", "--prune")
+    except GitError:
+        # check=False only raises for a timeout; a non-zero exit is handled
+        # below, and a git that cannot run at all is GitUnavailable and must
+        # reach the boundary.
+        return False, None
     if proc.returncode != 0:
         return False, None
     return True, fetch_head_mtime(repo)
