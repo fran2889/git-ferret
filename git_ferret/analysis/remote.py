@@ -21,7 +21,7 @@ from git_ferret.analysis.merged import (
     merge_verdict,
     remote_branches,
 )
-from git_ferret.config import Config, identity_matches
+from git_ferret.config import Config, identity_matches, split_identities
 from git_ferret.gitops import (
     base_ref_is_remote,
     list_branches,
@@ -83,10 +83,13 @@ def _passes_filters(
     ref: str,
     base_ref: str,
     identities: list[str],
-    branch_filter: str | None,
+    branch_filter: str | list[str] | None,
 ) -> bool:
-    """Apply the optional author and name filters, combined with AND."""
-    if branch_filter and branch_filter not in ref:
+    """Apply OR within branch patterns and AND with the optional author filter."""
+    patterns = split_identities(
+        [branch_filter] if isinstance(branch_filter, str) else branch_filter or []
+    )
+    if patterns and not any(pattern in ref for pattern in patterns):
         return False
     if identities:
         # The range matters: the user's commits sit in the base history and are
@@ -119,7 +122,7 @@ def analyse_remote(
     config: Config,
     base_ref: str | None,
     identities: list[str],
-    branch_filter: str | None,
+    branch_filter: str | list[str] | None,
 ) -> RepoReport:
     """List remote branches matching the filters. No deletion verdict here."""
     report = _new_report(repo, base_ref)
@@ -144,7 +147,7 @@ def analyse_merged_candidates(
     config: Config,
     base_ref: str | None,
     identities: list[str],
-    branch_filter: str | None,
+    branch_filter: str | list[str] | None,
 ) -> RepoReport:
     """Remote branches, each marked a deletion candidate or not.
 
