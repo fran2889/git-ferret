@@ -1,0 +1,58 @@
+name: Publish to PyPI
+
+# Deliberately manual. Publishing is a decision, not a consequence of merging
+# a release pull request. The workflow is ready; enabling it is a repository
+# and PyPI configuration step described in docs/releasing.md.
+on:
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: Release tag to publish, for example v0.2.0
+                required: true
+                type: string
+
+permissions:
+    contents: read
+    id-token: write
+
+concurrency:
+    group: pypi-${{ inputs.tag }}
+    cancel-in-progress: false
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        environment:
+            name: pypi
+            url: https://pypi.org/p/git-ferret
+        steps:
+            - name: Validate the tag before doing anything else
+              env:
+                  TAG: ${{ inputs.tag }}
+              run: |
+                  if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                      echo "error: tag must look like v1.2.3, got '$TAG'" >&2
+                      exit 1
+                  fi
+
+            # Trusted publishing needs no stored token, and the artifacts come
+            # from the GitHub release rather than a rebuild, so what is
+            # published is exactly what was smoke-tested there.
+            - name: Download the release artifacts
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  GH_REPO: ${{ github.repository }}
+                  TAG: ${{ inputs.tag }}
+              run: |
+                  mkdir -p dist
+                  if [ "$(gh release view "$TAG" --json isDraft --jq '.isDraft')" = "true" ]; then
+                      echo "error: $TAG is still a draft release" >&2
+                      exit 1
+                  fi
+                  gh release download "$TAG" --dir dist --pattern '*.whl' --pattern '*.tar.gz'
+                  ls -l dist
+
+            - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+              with:
+                  packages-dir: dist/

@@ -107,6 +107,8 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
   `dependency-review` context must also be required in the `Protect main` ruleset.
 - release-please is the only release path. Do not hand-edit versions, tags, or the release manifest;
   it opens the release pull request and the release workflow publishes the draft.
+- PyPI publishing is manual and lives in `.github/workflows/publish-pypi.yml`. Do not add a stored
+  token; it uses trusted publishing through the protected `pypi` environment.
 - Do not hand-apply Dependabot's automation labels. Dependabot uses the `uv` ecosystem so its pull
   requests update `uv.lock` as well as `pyproject.toml`.
 
