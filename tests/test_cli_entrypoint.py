@@ -357,4 +357,4 @@ def test_cli_writes_utf8_even_when_the_environment_names_a_legacy_encoding(
     )
 
     assert result.returncode == 0, result.stderr
-    assert "⚠️" in result.stdout
+    assert "🔌" in result.stdout

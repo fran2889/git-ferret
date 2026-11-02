@@ -142,14 +142,48 @@ def test_fetch_failure_is_reported_unreachable_and_stale(tmp_path: Path):
 def test_stale_warning_names_the_true_count(tmp_path: Path):
     # The warning names how many of how many. It read "1 of 1" for any run
     # because it was rendered from the first repository alone.
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    scan = tmp_path / "scan"
     for name in ("a", "b"):
-        repo = make_repo(tmp_path / name)
-        (repo / "f.txt").write_text("a\n")
-        commit(repo, "base")
+        clone_local(src, scan / name)
+
+    result = _cli("local", str(scan), "--no-fetch")
+
+    assert "2 of 2 repositories" in result.stdout
+
+
+def test_a_local_only_repository_is_not_counted_as_stale(tmp_path: Path):
+    # There is nothing to refresh in a repository with no remote, so it must
+    # not pad a warning that exists to flag state which could be out of date.
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+
+    scan = tmp_path / "scan"
+    clone_local(src, scan / "a-clone")
+    local = make_repo(scan / "b-local")
+    (local / "f.txt").write_text("a\n")
+    commit(local, "base")
+
+    result = _cli("local", str(scan), "--no-fetch")
+
+    assert result.returncode == 0, result.stderr
+    # Both were analysed; only the one with a remote could be stale, and
+    # --no-fetch leaves it so.
+    assert "1 of 2 repositories" in result.stdout
+
+
+def test_a_scan_of_only_local_repositories_has_no_stale_warning(tmp_path: Path):
+    repo = make_repo(tmp_path / "local")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
 
     result = _cli("local", str(tmp_path), "--no-fetch")
 
-    assert "2 of 2 repositories" in result.stdout
+    assert result.returncode == 0, result.stderr
+    assert "stale local state" not in result.stdout
 
 
 def test_stale_warning_fires_when_a_later_repository_is_stale(tmp_path: Path):

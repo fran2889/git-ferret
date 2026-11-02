@@ -84,3 +84,7 @@ def test_repo_report_is_stale_only_when_nothing_was_refreshed():
     assert RepoReport(path=Path("/tmp/r"), fetch_failed=True).is_stale is True
     fresh = RepoReport(path=Path("/tmp/r"), fetched_at=datetime(2026, 10, 16))
     assert fresh.is_stale is False
+    # No remote means nothing could have been refreshed: local-only is not
+    # stale, however long it has been since anything touched it.
+    local_only = RepoReport(path=Path("/tmp/r"), fetch_attempted=False, has_remote=False)
+    assert local_only.is_stale is False
