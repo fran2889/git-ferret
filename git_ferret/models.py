@@ -34,6 +34,7 @@ class Status(StrEnum):
     DIRTY = "DIRTY"
     DETACHED = "DETACHED"
     STASH = "STASH"
+    SHELF = "SHELF"
     UNREACHABLE = "UNREACHABLE"
     NO_BASE = "NO_BASE"
     # The two verdicts `merged` produces for a branch that is genuinely merged.
@@ -76,6 +77,7 @@ EMOJI_FOR: dict[Status, str] = {
     Status.UNKNOWN: "❓",
     Status.DIRTY: "✏️",
     Status.STASH: "📦",
+    Status.SHELF: "🗄️",
     Status.DETACHED: "📍",
     Status.NO_BASE: "🧭",
     Status.SAFE_TO_DELETE: "🗑️",
