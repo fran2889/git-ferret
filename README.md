@@ -287,6 +287,7 @@ Every command accepts a directory argument, and all of them default to the curre
 |---|---|---|
 | `PATH` | `local`, `remote`, `merged` | Directory to scan recursively. Defaults to `.`. |
 | `--no-fetch` | `local`, `remote`, `merged` | Skip `git fetch --all --prune` and read the existing refs. |
+| `--quiet`, `-q` | `local`, `remote`, `merged` | Print only repositories with findings. |
 | `--update` | `local` | Fast-forward clean worktrees behind their upstream. The only write path. |
 | `--author SUBSTR` | `remote`, `merged` | Substring of `Name <email>`. Repeatable, or comma-separated. |
 | `--branch SUBSTR` | `remote`, `merged` | Substring of the branch name. Repeatable, or comma-separated. |
@@ -442,6 +443,10 @@ locally, and reporting that as a conflict would invent a problem you do not have
 
 Findings alone never change the exit code, so a weekly cron job can alert on *new* findings by
 diffing two reports rather than on exit status.
+
+`--quiet` suppresses the section for any repository with no findings. The header, the stale
+warning, and a non-empty `## fast-forwarded` block still print, so a quiet run is still a complete
+report of what happened.
 
 | Exit code | Meaning |
 |---|---|
