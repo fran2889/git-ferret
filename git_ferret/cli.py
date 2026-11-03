@@ -7,8 +7,10 @@ Three subcommands, each independently runnable. All default to fetching and all
 accept ``--no-fetch``, so the intended rhythm is one fetching run followed by
 cheap repeat runs against local state.
 
-Report-only: the sole write this tool performs is ``git merge --ff-only``
-behind ``local --update``, which is off unless asked for.
+Report-only: the sole writes this tool performs are ``git merge --ff-only`` in a
+clean worktree and a compare-and-swap ``git update-ref`` for a clean branch that
+is not checked out, both behind ``local --update``, which is off unless asked
+for.
 """
 
 from __future__ import annotations
@@ -32,8 +34,8 @@ from git_ferret.analysis.remote import (
 from git_ferret.config import Config, ConfigError, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
 from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
-from git_ferret.gitops import fetch_all, resolve_base_ref
-from git_ferret.models import RepoReport
+from git_ferret.gitops import fetch_all, list_branches, resolve_base_ref
+from git_ferret.models import BranchInfo, RepoReport
 from git_ferret.report import (
     display_path,
     emit,
@@ -106,7 +108,10 @@ def local(
     update: bool = typer.Option(
         False,
         "--update",
-        help="Fast-forward clean worktrees. This is the only write this tool performs.",
+        help=(
+            "Fast-forward clean worktrees and unchecked-out branches. "
+            "This is the only write this tool performs."
+        ),
     ),
 ) -> None:
     """Branches checked out locally, worktrees, dirty state."""
@@ -136,7 +141,7 @@ def local(
         if report.is_stale:
             stale += 1
         if update:
-            updated.extend((repo, branch) for branch in fast_forward_worktrees(repo))
+            updated.extend((repo, branch) for branch in fast_forward_branches(repo))
         emit(render_repo(report, root))
 
     _emit_summary(updated, root)
@@ -317,8 +322,22 @@ def _emit_footer(stale: int, analysed: int) -> None:
         emit(render_stale_warning(stale, analysed))
 
 
-def fast_forward_worktrees(repo: Path) -> list[str]:
+def fast_forward_branches(repo: Path) -> list[str]:
     """The branches fast-forwarded in *repo*, and nothing else.
+
+    The worktree pass runs first and owns every checked-out branch. The ref-only
+    pass then moves branches no worktree has checked out. Only branches that
+    moved are returned; every refusal is already a finding in the report.
+    """
+    worktrees = list_worktrees(repo)
+    updated = _fast_forward_worktrees(worktrees)
+    checked_out = {branch for _, branch in worktrees if branch is not None}
+    updated.extend(_fast_forward_refs(repo, checked_out))
+    return updated
+
+
+def _fast_forward_worktrees(worktrees: list[tuple[Path, str | None]]) -> list[str]:
+    """The checked-out branches fast-forwarded by the worktree pass.
 
     ``git merge --ff-only`` in each clean, attached worktree that is behind its
     upstream. Git itself refuses a fast-forward that would overwrite a locally
@@ -339,7 +358,7 @@ def fast_forward_worktrees(repo: Path) -> list[str]:
     unreported for that reason, not by oversight.
     """
     updated: list[str] = []
-    for worktree, branch in list_worktrees(repo):
+    for worktree, branch in worktrees:
         if branch is None:
             continue
         status = run_git(worktree, "status", "--porcelain", check=False)
@@ -357,6 +376,81 @@ def fast_forward_worktrees(repo: Path) -> list[str]:
         if proc.returncode == 0:
             updated.append(branch)
     return updated
+
+
+def _fast_forward_refs(repo: Path, checked_out: set[str]) -> list[str]:
+    """Move unchecked-out branches whose upstream descends from their tip."""
+    updated: list[str] = []
+    for branch in list_branches(repo):
+        if branch.name in checked_out:
+            continue
+        if _fast_forward_ref(repo, branch):
+            updated.append(branch.name)
+    return updated
+
+
+def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
+    """Move one unchecked-out branch when the move is a genuine fast-forward."""
+    upstream = _upstream_ref(branch)
+    if upstream is None:
+        return False
+    # `git update-ref` dereferences a symbolic ref, so a symbolic
+    # `refs/heads/<branch>` would move its target (a checked-out `main`, or a
+    # remote-tracking ref) rather than the branch itself. Refuse anything
+    # symbolic, and fail closed when the check cannot prove the ref is direct:
+    # `symbolic-ref --quiet` exits 0 for a symbolic ref and 1 for a direct one.
+    symbolic = run_git(repo, "symbolic-ref", "--quiet", f"refs/heads/{branch.name}")
+    if symbolic.returncode != 1:
+        return False
+    old_proc = run_git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch.name}")
+    if old_proc.returncode != 0 or not old_proc.stdout.strip():
+        return False
+    new_proc = run_git(repo, "rev-parse", "--verify", "--quiet", upstream)
+    if new_proc.returncode != 0 or not new_proc.stdout.strip():
+        return False
+    old = old_proc.stdout.strip()
+    new = new_proc.stdout.strip()
+    if old == new:
+        return False
+    ancestor = run_git(repo, "merge-base", "--is-ancestor", old, new)
+    if ancestor.returncode != 0:
+        return False
+    # Revalidate checked-out membership at the write boundary, immediately
+    # before the CAS. The snapshot the caller filtered with can go stale between
+    # then and here: another process may have checked this branch out or added a
+    # worktree for it, and git has no atomic "ref is not checked out" lock, so
+    # this narrows the window to the write itself.
+    if branch.name in {b for _, b in list_worktrees(repo) if b is not None}:
+        return False
+    return _move_ref(repo, branch.name, new, old)
+
+
+def _upstream_ref(branch: BranchInfo) -> str | None:
+    """The full remote-tracking ref for *branch*, or None without one.
+
+    A short upstream name can be shadowed by a local branch of the same name,
+    so the ref-only path resolves the full ``refs/remotes/...`` form; anything
+    this cannot name unambiguously is refused rather than guessed.
+    """
+    if not branch.remote or not branch.upstream:
+        return None
+    if branch.remote == ".":
+        return None
+    prefix = f"{branch.remote}/"
+    if not branch.upstream.startswith(prefix):
+        return None
+    short = branch.upstream[len(prefix) :]
+    return f"refs/remotes/{branch.remote}/{short}"
+
+
+def _move_ref(repo: Path, branch: str, new: str, old: str) -> bool:
+    """Compare-and-swap refs/heads/<branch> from *old* to *new*.
+
+    The expected-old value is mandatory: without it ``update-ref`` would
+    silently overwrite a branch that moved or was recreated after it was read.
+    """
+    proc = run_git(repo, "update-ref", f"refs/heads/{branch}", new, old)
+    return proc.returncode == 0
 
 
 def _configure_output() -> None:

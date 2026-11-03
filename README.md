@@ -47,8 +47,8 @@ Without that flag, every command is read-only. There is no code path that delete
 commits, resets, or rewrites anything, so you can audit a directory of real repositories without
 touching them.
 
-`--update` fast-forwards worktrees that are clean and behind their upstream, and reports what it
-did:
+`--update` fast-forwards clean worktrees and clean unchecked-out branches that are behind their
+upstream, and reports what it did:
 
 ```markdown
 ## fast-forwarded
@@ -57,7 +57,8 @@ did:
 - web-app: `main` fast-forwarded
 ```
 
-Only what was updated. A worktree that was left alone is not an update, so it does not appear here:
+Only what was updated. A worktree or branch that was left alone is not an update, so it does not
+appear here:
 its state is already reported in that repository's own section, where `[DIRTY]`, `[DETACHED]`,
 `[NOT PUSHED] no upstream configured` and `[DIVERGED]` sit among the other findings. Nothing is lost
 by not repeating it, and the block stays the short record of what this run wrote.
@@ -65,6 +66,12 @@ by not repeating it, and the block stays the short record of what this run wrote
 A worktree with uncommitted changes is skipped rather than updated. Git would in fact allow that
 when the incoming changes touch different files, as it refuses only when they would overwrite your
 edits, but skipping keeps this tool from moving a working tree that has unsaved work.
+
+A branch that no worktree has checked out has no working tree to protect. When it is behind its
+upstream, the branch ref is moved by compare-and-swap from its own tip: `git update-ref` only
+succeeds if the branch still points where it did when it was read, so a branch that moved in the
+meantime is refused rather than forced. An ahead or diverged branch is left alone and reported as
+before.
 
 ## Install
 
@@ -287,7 +294,7 @@ Every command accepts a directory argument, and all of them default to the curre
 |---|---|---|
 | `PATH` | `local`, `remote`, `merged` | Directory to scan recursively. Defaults to `.`. |
 | `--no-fetch` | `local`, `remote`, `merged` | Skip `git fetch --all --prune` and read the existing refs. |
-| `--update` | `local` | Fast-forward clean worktrees behind their upstream. The only write path. |
+| `--update` | `local` | Fast-forward clean worktrees and unchecked-out branches behind their upstream. The only write path. |
 | `--author SUBSTR` | `remote`, `merged` | Substring of `Name <email>`. Repeatable, or comma-separated. |
 | `--branch SUBSTR` | `remote`, `merged` | Substring of the branch name. Repeatable, or comma-separated. |
 | `--help` | every command | Show help and exit 0. |

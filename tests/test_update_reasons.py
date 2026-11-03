@@ -14,7 +14,7 @@ where they are asserted.
 from pathlib import Path
 
 from git_ferret.analysis.local import analyse_local
-from git_ferret.cli import fast_forward_worktrees
+from git_ferret.cli import fast_forward_branches
 from git_ferret.config import Config
 from git_ferret.gitops import resolve_base_ref
 from git_ferret.models import Finding, Status
@@ -31,6 +31,10 @@ def _behind_clone(tmp_path: Path) -> Path:
     (src / "f.txt").write_text("a\nremote\n")
     commit(src, "remote work")
     run(clone, "fetch", "--all", "--prune")
+    # Keep the clone's own `main` current: these tests are about the
+    # checked-out worktree path, and an unchecked-out `main` behind its
+    # upstream would now legitimately move through the ref-only path too.
+    run(clone, "branch", "--force", "main", "origin/main")
     return clone
 
 
@@ -43,7 +47,7 @@ def test_dirty_worktree_is_reported_as_dirty_above(tmp_path: Path):
     clone = _behind_clone(tmp_path)
     (clone / "wip.txt").write_text("x\n")
 
-    assert fast_forward_worktrees(clone) == []
+    assert fast_forward_branches(clone) == []
     finding = _finding(clone, Status.DIRTY)
     assert "untracked" in finding.detail
     # The point of the marker is that it stands for the reason on its own.
@@ -66,17 +70,92 @@ def test_diverged_branch_is_reported_as_diverged(tmp_path: Path):
     run(src, "checkout", "main")
     run(clone, "fetch", "--all", "--prune")
 
-    assert fast_forward_worktrees(clone) == []
+    assert fast_forward_branches(clone) == []
     finding = _finding(clone, Status.DIVERGED)
     assert "1 ahead / 1 behind" in finding.detail
     assert "cannot fast-forward" in finding.detail
+
+
+def _ref_only_diverged_clone(tmp_path: Path) -> Path:
+    """A clone whose local `feat` branch is diverged and not checked out."""
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "feat")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "checkout", "-b", "feat", "origin/feat")
+    (clone / "local.txt").write_text("local\n")
+    commit(clone, "local work")
+    run(clone, "checkout", "main")
+    run(src, "checkout", "feat")
+    (src / "f.txt").write_text("a\nremote\n")
+    commit(src, "remote work")
+    run(src, "checkout", "main")
+    run(clone, "fetch", "--all", "--prune")
+    return clone
+
+
+def test_unchecked_out_diverged_branch_is_reported_as_diverged(tmp_path: Path):
+    clone = _ref_only_diverged_clone(tmp_path)
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
+    finding = _finding(clone, Status.DIVERGED)
+    assert "1 ahead / 1 behind" in finding.detail
+    assert "cannot fast-forward" in finding.detail
+
+
+def test_unchecked_out_ahead_branch_is_not_moved(tmp_path: Path):
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "feat")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "checkout", "-b", "feat", "origin/feat")
+    (clone / "local.txt").write_text("local\n")
+    commit(clone, "local work")
+    run(clone, "checkout", "main")
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
+    finding = _finding(clone, Status.NOT_PUSHED)
+    assert "1 commits ahead" in finding.detail
+
+
+def test_unchecked_out_branch_with_no_upstream_is_not_moved(tmp_path: Path):
+    repo = make_repo(tmp_path / "repo")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    run(repo, "branch", "solo")
+    run(repo, "checkout", "-b", "work")
+    before = run(repo, "rev-parse", "solo").stdout.strip()
+
+    assert fast_forward_branches(repo) == []
+    assert run(repo, "rev-parse", "solo").stdout.strip() == before
+
+
+def test_unchecked_out_branch_with_deleted_upstream_is_not_moved(tmp_path: Path):
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "feat")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "branch", "--track", "feat", "origin/feat")
+    run(src, "branch", "-D", "feat")
+    run(clone, "fetch", "--all", "--prune")
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
 
 
 def test_worktree_with_no_upstream_is_reported_as_not_pushed(tmp_path: Path):
     clone = _behind_clone(tmp_path)
     run(clone, "branch", "--unset-upstream")
 
-    assert fast_forward_worktrees(clone) == []
+    assert fast_forward_branches(clone) == []
     finding = _finding(clone, Status.NOT_PUSHED)
     assert "no upstream configured" in finding.detail
 
@@ -88,10 +167,10 @@ def test_up_to_date_branch_is_not_reported_as_updated(tmp_path: Path):
     clone = clone_local(src, tmp_path / "clone")
 
     # Nothing to do is not something that happened.
-    assert fast_forward_worktrees(clone) == []
+    assert fast_forward_branches(clone) == []
 
 
 def test_a_fast_forward_names_only_the_branch_that_moved(tmp_path: Path):
     clone = _behind_clone(tmp_path)
 
-    assert fast_forward_worktrees(clone) == ["feat"]
+    assert fast_forward_branches(clone) == ["feat"]
