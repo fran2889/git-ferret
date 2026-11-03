@@ -3,6 +3,7 @@
 
 """End-to-end coverage: all three subcommands over a realistic repository tree."""
 
+import subprocess
 from pathlib import Path
 from typing import TextIO
 
@@ -45,6 +46,24 @@ def _tree(tmp_path: Path):
 
     make_repo(tmp_path / "solo")  # a repository with no remote at all
     return tmp_path
+
+
+def _clean_clone(tmp_path: Path, dest: Path) -> Path:
+    """A freshly fetched clone with only `main`: nothing for a scan to report."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    return clone_local(src, dest)
+
+
+def _with_unpushed_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone carrying one local branch that exists nowhere on the remote."""
+    clone = _clean_clone(tmp_path, dest)
+    run(clone, "checkout", "-b", "local-only", "origin/main")
+    (clone / "mine.txt").write_text("mine\n")
+    commit(clone, "local only")
+    run(clone, "checkout", "main")
+    return clone
 
 
 def test_local_end_to_end_emits_valid_markdown(tmp_path: Path):
@@ -217,3 +236,82 @@ def test_each_repository_is_fetched_just_before_its_section(
         ("fetch", "b"),
         ("section", "b"),
     ]
+
+
+def test_quiet_prints_only_the_header_when_every_repository_is_clean(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_short_quiet_flag_is_accepted(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "-q"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_quiet_still_prints_a_repository_with_findings(tmp_path: Path):
+    clone = _with_unpushed_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`local-only` [NOT PUSHED]" in res.stdout
+    assert "fetched " in res.stdout
+
+
+def test_quiet_keeps_a_repository_whose_only_finding_is_ok(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    run(clone, "checkout", "-b", "clean-branch", "origin/main")
+    run(clone, "checkout", "main")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`clean-branch` [OK]" in res.stdout
+
+
+def test_quiet_keeps_the_stale_warning_while_hiding_the_section(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet", "--no-fetch"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout.startswith("# git-ferret")
+    assert "## " not in res.stdout
+    assert "1 of 1 repositories" in res.stdout
+
+
+def test_quiet_still_counts_hidden_repositories_as_stale(tmp_path: Path):
+    scan = tmp_path / "scan"
+    _clean_clone(tmp_path, scan / "one")
+    _with_unpushed_branch(tmp_path, scan / "two")
+    res = runner.invoke(build_parser(), ["local", str(scan), "--quiet", "--no-fetch"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout.count("## ") == 1
+    assert "2 of 2 repositories" in res.stdout
+
+
+def test_quiet_keeps_the_fast_forwarded_block(tmp_path: Path):
+    src = make_repo(tmp_path / "fixtures" / "ff-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    clone = clone_local(src, tmp_path / "clone")
+    (src / "f.txt").write_text("a\nb\n")
+    commit(src, "second")
+
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet", "--update"])
+    assert res.exit_code == 0, res.output
+    assert "## fast-forwarded" in res.stdout
+    assert "`main` fast-forwarded" in res.stdout
+    assert "## ." not in res.stdout
+
+
+def test_quiet_does_not_hide_an_analysis_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise subprocess.SubprocessError("git said no")
+
+    monkeypatch.setattr(cli_module, "analyse_local", refuse)
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "error analysing" in res.stderr

@@ -64,3 +64,9 @@ def test_update_is_not_on_remote():
 
 def test_local_help_documents_it_does_not_write_by_default():
     assert "--update" in _help("local")
+
+
+def test_local_help_lists_quiet_flag():
+    help_text = _help("local")
+    assert "--quiet" in help_text
+    assert "-q" in help_text

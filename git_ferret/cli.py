@@ -96,6 +96,19 @@ def _aborts_on_interrupt(func: Callable[..., None]) -> Callable[..., None]:
     return wrapper
 
 
+def _emit_repo(report: RepoReport, root: Path, quiet: bool) -> None:
+    """Print one repository's section, unless quiet hides it.
+
+    The filter lives here, after analysis and after the stale and analysed
+    counters have been updated, so a hidden repository still counts in the
+    footer and still contributes its findings to nothing else. Rendering is
+    unchanged; quiet removes whole sections, never lines.
+    """
+    if quiet and not report.findings:
+        return
+    emit(render_repo(report, root))
+
+
 @app.command()
 @_aborts_on_interrupt
 def local(
@@ -107,6 +120,9 @@ def local(
         False,
         "--update",
         help="Fast-forward clean worktrees. This is the only write this tool performs.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Print only repositories with findings."
     ),
 ) -> None:
     """Branches checked out locally, worktrees, dirty state."""
@@ -137,7 +153,7 @@ def local(
             stale += 1
         if update:
             updated.extend((repo, branch) for branch in fast_forward_worktrees(repo))
-        emit(render_repo(report, root))
+        _emit_repo(report, root, quiet)
 
     _emit_summary(updated, root)
     _emit_footer(stale, analysed)
