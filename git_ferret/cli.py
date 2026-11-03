@@ -170,9 +170,12 @@ def remote(
     branch: list[str] = typer.Option(
         [], "--branch", help="Substring of the branch name. Repeatable, or comma-separated."
     ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Print only repositories with findings."
+    ),
 ) -> None:
     """Remote branches matching the filters."""
-    _run(ANALYSES["remote"], path, no_fetch, author, branch)
+    _run(ANALYSES["remote"], path, no_fetch, author, branch, quiet)
 
 
 @app.command()
@@ -186,9 +189,12 @@ def merged(
     branch: list[str] = typer.Option(
         [], "--branch", help="Substring of the branch name. Repeatable, or comma-separated."
     ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Print only repositories with findings."
+    ),
 ) -> None:
     """Remote branches whose changes are already in the base branch."""
-    _run(ANALYSES["merged"], path, no_fetch, author, branch)
+    _run(ANALYSES["merged"], path, no_fetch, author, branch, quiet)
 
 
 def build_parser() -> typer.Typer:
@@ -259,6 +265,7 @@ def _run(
     no_fetch: bool,
     author: list[str] | None,
     branch_filter: str | list[str] | None,
+    quiet: bool,
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
@@ -287,7 +294,7 @@ def _run(
         analysed += 1
         if report.is_stale:
             stale += 1
-        emit(render_repo(report, root))
+        _emit_repo(report, root, quiet)
 
     _emit_footer(stale, analysed)
 
@@ -298,9 +305,10 @@ def run_command(
     no_fetch: bool,
     author: list[str] | None = None,
     branch_filter: str | list[str] | None = None,
+    quiet: bool = False,
 ) -> None:
     """Run one named subcommand's analysis over *path*."""
-    _run(ANALYSES[command], path, no_fetch, author or [], branch_filter)
+    _run(ANALYSES[command], path, no_fetch, author or [], branch_filter, quiet)
 
 
 def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:

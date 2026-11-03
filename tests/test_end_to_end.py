@@ -66,6 +66,32 @@ def _with_unpushed_branch(tmp_path: Path, dest: Path) -> Path:
     return clone
 
 
+def _clone_with_branch(tmp_path: Path, dest: Path, name: str) -> Path:
+    """A clone whose remote carries branch *name* with a commit on it."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", name)
+    (src / f"{name}.txt").write_text(f"{name}\n")
+    commit(src, f"work on {name}")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_merged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `done` is already squashed into main."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "done")
+    (src / "f.txt").write_text("a\ndone\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    run(src, "merge", "--squash", "done")
+    commit(src, "merge done")
+    return clone_local(src, dest)
+
+
 def test_local_end_to_end_emits_valid_markdown(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
@@ -315,3 +341,33 @@ def test_quiet_does_not_hide_an_analysis_error(tmp_path: Path, monkeypatch: pyte
     res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
     assert res.exit_code == 0, res.output
     assert "error analysing" in res.stderr
+
+
+def test_remote_quiet_hides_a_repository_with_no_matching_branches(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["remote", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_remote_quiet_keeps_a_repository_with_matching_branches(tmp_path: Path):
+    clone = _clone_with_branch(tmp_path, tmp_path / "clean", "feature")
+    res = runner.invoke(build_parser(), ["remote", str(clone), "--quiet", "--branch", "feature"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`origin/feature` [OK]" in res.stdout
+
+
+def test_merged_quiet_hides_a_repository_with_nothing_merged(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_keeps_a_repository_with_a_verdict(tmp_path: Path):
+    clone = _clone_with_merged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`origin/done` [SAFE TO DELETE]" in res.stdout
