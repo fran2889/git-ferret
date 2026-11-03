@@ -14,10 +14,14 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from git_ferret.cli import (
+    _fast_forward_ref,  # pyright: ignore[reportPrivateUsage]
     _move_ref,  # pyright: ignore[reportPrivateUsage]
+    _upstream_ref,  # pyright: ignore[reportPrivateUsage]
     build_parser,
     fast_forward_branches,
 )
+from git_ferret.gitops import list_branches
+from git_ferret.models import BranchInfo
 from tests.helpers import clone_local, commit, make_repo, run
 
 
@@ -55,6 +59,41 @@ def _ref_only_behind_clone(tmp_path: Path) -> Path:
     commit(src, "remote work")
     run(src, "checkout", "main")
     run(clone, "fetch", "--all", "--prune")
+    return clone
+
+
+def _symbolic_alias_to_main_clone(tmp_path: Path) -> Path:
+    """A clone whose `alias` is a symbolic ref to a dirty, behind `main`."""
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "symbolic-ref", "refs/heads/alias", "refs/heads/main")
+    run(clone, "config", "branch.alias.remote", "origin")
+    run(clone, "config", "branch.alias.merge", "refs/heads/main")
+    (src / "f.txt").write_text("a\nremote\n")
+    commit(src, "remote work")
+    run(clone, "fetch", "--all", "--prune")
+    (clone / "wip.txt").write_text("dirty\n")
+    return clone
+
+
+def _symbolic_alias_to_remote_clone(tmp_path: Path) -> Path:
+    """A clone whose `alias` is a symbolic ref to `refs/remotes/origin/other`."""
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "other")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "symbolic-ref", "refs/heads/alias", "refs/remotes/origin/other")
+    run(clone, "config", "branch.alias.remote", "origin")
+    run(clone, "config", "branch.alias.merge", "refs/heads/main")
+    (src / "f.txt").write_text("a\nremote\n")
+    commit(src, "remote work")
+    run(clone, "fetch", "--all", "--prune")
+    # Keep the checked-out `main` from legitimately moving through either pass,
+    # so the test observes `alias` alone.
+    (clone / "wip.txt").write_text("dirty\n")
     return clone
 
 
@@ -140,6 +179,50 @@ def test_a_missing_branch_is_not_recreated(tmp_path: Path):
 
     assert _move_ref(repo, "gone", new, old) is False
     assert run(repo, "branch", "--list", "gone").stdout.strip() == ""
+
+
+def test_a_symbolic_branch_is_not_dereferenced_to_move_main(tmp_path: Path):
+    clone = _symbolic_alias_to_main_clone(tmp_path)
+    main_before = run(clone, "rev-parse", "main").stdout.strip()
+    assert main_before != run(clone, "rev-parse", "origin/main").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "main").stdout.strip() == main_before
+    assert run(clone, "symbolic-ref", "refs/heads/alias").stdout.strip() == "refs/heads/main"
+
+
+def test_a_symbolic_branch_is_not_dereferenced_to_move_a_remote_tracking_ref(tmp_path: Path):
+    clone = _symbolic_alias_to_remote_clone(tmp_path)
+    other_before = run(clone, "rev-parse", "refs/remotes/origin/other").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "refs/remotes/origin/other").stdout.strip() == other_before
+    assert (
+        run(clone, "symbolic-ref", "refs/heads/alias").stdout.strip() == "refs/remotes/origin/other"
+    )
+
+
+def test_a_branch_checked_out_after_the_snapshot_is_not_moved(tmp_path: Path):
+    clone = _ref_only_behind_clone(tmp_path)
+    feat = next(branch for branch in list_branches(clone) if branch.name == "feat")
+    linked = tmp_path / "linked"
+    run(clone, "worktree", "add", str(linked), "feat")
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert _fast_forward_ref(clone, feat) is False
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
+
+
+def test_upstream_ref_refuses_a_local_upstream():
+    branch = BranchInfo(name="feat", remote=".", upstream="main")
+
+    assert _upstream_ref(branch) is None
+
+
+def test_upstream_ref_refuses_a_malformed_prefix():
+    branch = BranchInfo(name="feat", remote="origin", upstream="refs/heads/main")
+
+    assert _upstream_ref(branch) is None
 
 
 def test_an_unreadable_worktree_is_not_ref_updated(tmp_path: Path):

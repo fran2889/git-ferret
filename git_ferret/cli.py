@@ -384,8 +384,6 @@ def _fast_forward_refs(repo: Path, checked_out: set[str]) -> list[str]:
     for branch in list_branches(repo):
         if branch.name in checked_out:
             continue
-        if _upstream_ref(branch) is None:
-            continue
         if _fast_forward_ref(repo, branch):
             updated.append(branch.name)
     return updated
@@ -395,6 +393,14 @@ def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
     """Move one unchecked-out branch when the move is a genuine fast-forward."""
     upstream = _upstream_ref(branch)
     if upstream is None:
+        return False
+    # `git update-ref` dereferences a symbolic ref, so a symbolic
+    # `refs/heads/<branch>` would move its target (a checked-out `main`, or a
+    # remote-tracking ref) rather than the branch itself. Refuse anything
+    # symbolic, and fail closed when the check cannot prove the ref is direct:
+    # `symbolic-ref --quiet` exits 0 for a symbolic ref and 1 for a direct one.
+    symbolic = run_git(repo, "symbolic-ref", "--quiet", f"refs/heads/{branch.name}")
+    if symbolic.returncode != 1:
         return False
     old_proc = run_git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch.name}")
     if old_proc.returncode != 0 or not old_proc.stdout.strip():
@@ -408,6 +414,13 @@ def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
         return False
     ancestor = run_git(repo, "merge-base", "--is-ancestor", old, new)
     if ancestor.returncode != 0:
+        return False
+    # Revalidate checked-out membership at the write boundary, immediately
+    # before the CAS. The snapshot the caller filtered with can go stale between
+    # then and here: another process may have checked this branch out or added a
+    # worktree for it, and git has no atomic "ref is not checked out" lock, so
+    # this narrows the window to the write itself.
+    if branch.name in {b for _, b in list_worktrees(repo) if b is not None}:
         return False
     return _move_ref(repo, branch.name, new, old)
 

@@ -84,6 +84,12 @@ A checked-out branch is excluded from the ref-only pass even when its worktree i
 worktree path owns it. A dirty or unreadable checked-out worktree is therefore still skipped by the
 worktree pass and cannot be moved through the ref-only pass.
 
+Review added two guards to that exclusion. The ref-only path refuses a candidate whose destination
+`refs/heads/<branch>` is symbolic, because `git update-ref` dereferences a symbolic ref and would
+move the ref's target (a checked-out `main`, or a remote-tracking ref) rather than the branch
+itself. It also revalidates checked-out membership immediately before the write, because the
+snapshot taken before the pass can go stale and git offers no atomic "ref is not checked out" lock.
+
 The combined function keeps returning only the branches that moved. Diverged, ahead, no-upstream,
 upstream-gone, up-to-date, and dirty cases continue to appear only as findings in the repository's
 own section.

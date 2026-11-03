@@ -57,7 +57,8 @@ upstream, and reports what it did:
 - web-app: `main` fast-forwarded
 ```
 
-Only what was updated. A worktree that was left alone is not an update, so it does not appear here:
+Only what was updated. A worktree or branch that was left alone is not an update, so it does not
+appear here:
 its state is already reported in that repository's own section, where `[DIRTY]`, `[DETACHED]`,
 `[NOT PUSHED] no upstream configured` and `[DIVERGED]` sit among the other findings. Nothing is lost
 by not repeating it, and the block stays the short record of what this run wrote.
