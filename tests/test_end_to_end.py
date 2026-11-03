@@ -92,6 +92,48 @@ def _clone_with_merged_branch(tmp_path: Path, dest: Path) -> Path:
     return clone_local(src, dest)
 
 
+def _clone_with_unmerged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `open` has work main does not contain."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "open")
+    (src / "open.txt").write_text("open\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_merged_and_unmerged_branches(tmp_path: Path, dest: Path) -> Path:
+    """A clone with one merged branch and one live branch."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "done")
+    (src / "f.txt").write_text("a\ndone\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    run(src, "merge", "--squash", "done")
+    commit(src, "merge done")
+    run(src, "checkout", "-b", "open")
+    (src / "open.txt").write_text("open\n")
+    commit(src, "open work")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_without_base(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose only branch is `trunk`: no main or master to compare."""
+    src = tmp_path / "fixtures" / f"{dest.name}-src"
+    src.mkdir(parents=True)
+    run(src, "init", "-b", "trunk")
+    run(src, "config", "user.name", "Dev")
+    run(src, "config", "user.email", "dev@example.com")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    return clone_local(src, dest)
+
+
 def test_local_end_to_end_emits_valid_markdown(tmp_path: Path):
     root = _tree(tmp_path)
     res = runner.invoke(build_parser(), ["local", str(root), "--no-fetch"])
@@ -371,3 +413,37 @@ def test_merged_quiet_keeps_a_repository_with_a_verdict(tmp_path: Path):
     assert res.exit_code == 0, res.output
     assert "## .\n" in res.stdout
     assert "`origin/done` [SAFE TO DELETE]" in res.stdout
+
+
+def test_merged_quiet_hides_a_repository_with_only_unmerged_branches(tmp_path: Path):
+    clone = _clone_with_unmerged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_drops_unmerged_lines_from_a_visible_repository(tmp_path: Path):
+    clone = _clone_with_merged_and_unmerged_branches(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "`origin/done` [SAFE TO DELETE]" in res.stdout
+    assert "`origin/open`" not in res.stdout
+    assert "[NOT MERGED]" not in res.stdout
+
+
+def test_merged_quiet_keeps_no_base_visible(tmp_path: Path):
+    clone = _clone_without_base(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "[NO BASE]" in res.stdout
+
+
+def test_merged_quiet_keeps_unreachable_visible_while_hiding_unmerged(tmp_path: Path):
+    clone = _clone_with_unmerged_branch(tmp_path, tmp_path / "clean")
+    run(clone, "remote", "set-url", "origin", str(tmp_path / "missing"))
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "[UNREACHABLE]" in res.stdout
+    assert "[NOT MERGED]" not in res.stdout

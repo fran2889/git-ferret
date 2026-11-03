@@ -17,6 +17,7 @@ import functools
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import click
@@ -33,7 +34,7 @@ from git_ferret.config import Config, ConfigError, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
 from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
 from git_ferret.gitops import fetch_all, resolve_base_ref
-from git_ferret.models import RepoReport
+from git_ferret.models import RepoReport, Status
 from git_ferret.report import (
     display_path,
     emit,
@@ -96,16 +97,33 @@ def _aborts_on_interrupt(func: Callable[..., None]) -> Callable[..., None]:
     return wrapper
 
 
-def _emit_repo(report: RepoReport, root: Path, quiet: bool) -> None:
+QUIET_HIDDEN_STATUSES = frozenset({Status.NOT_MERGED, Status.CONFLICTS, Status.UNKNOWN})
+
+
+def _emit_repo(report: RepoReport, root: Path, quiet: bool, hide_unmerged: bool = False) -> None:
     """Print one repository's section, unless quiet hides it.
 
     The filter lives here, after analysis and after the stale and analysed
     counters have been updated, so a hidden repository still counts in the
     footer and still contributes its findings to nothing else. Rendering is
     unchanged; quiet removes whole sections, never lines.
+
+    ``hide_unmerged`` is the one command-specific rule: ``merged --quiet``
+    drops branches whose verdict is not merged, but keeps repository-level
+    warnings such as ``[NO BASE]`` and ``[UNREACHABLE]``.
     """
-    if quiet and not report.findings:
+    if not quiet:
+        emit(render_repo(report, root))
         return
+    visible = (
+        [finding for finding in report.findings if finding.status not in QUIET_HIDDEN_STATUSES]
+        if hide_unmerged
+        else report.findings
+    )
+    if not visible:
+        return
+    if hide_unmerged:
+        report = replace(report, findings=visible)
     emit(render_repo(report, root))
 
 
@@ -194,7 +212,7 @@ def merged(
     ),
 ) -> None:
     """Remote branches whose changes are already in the base branch."""
-    _run(ANALYSES["merged"], path, no_fetch, author, branch, quiet)
+    _run(ANALYSES["merged"], path, no_fetch, author, branch, quiet, hide_unmerged=True)
 
 
 def build_parser() -> typer.Typer:
@@ -266,6 +284,7 @@ def _run(
     author: list[str] | None,
     branch_filter: str | list[str] | None,
     quiet: bool,
+    hide_unmerged: bool = False,
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
@@ -294,7 +313,7 @@ def _run(
         analysed += 1
         if report.is_stale:
             stale += 1
-        _emit_repo(report, root, quiet)
+        _emit_repo(report, root, quiet, hide_unmerged)
 
     _emit_footer(stale, analysed)
 
@@ -308,7 +327,15 @@ def run_command(
     quiet: bool = False,
 ) -> None:
     """Run one named subcommand's analysis over *path*."""
-    _run(ANALYSES[command], path, no_fetch, author or [], branch_filter, quiet)
+    _run(
+        ANALYSES[command],
+        path,
+        no_fetch,
+        author or [],
+        branch_filter,
+        quiet,
+        hide_unmerged=command == "merged",
+    )
 
 
 def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:
