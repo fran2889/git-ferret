@@ -2,13 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add `--quiet` / `-q` to `local`, `remote`, and `merged` so only repositories with findings are printed.
+**Goal:** Add `--quiet` / `-q` to `local`, `remote`, and `merged` so clean repositories are hidden, and `merged` also hides branches that are not merged.
 
-**Architecture:** Filter at the CLI's emission point. A shared `_emit_repo` helper skips `render_repo` when quiet is set and the report's `findings` list is empty. Fetching, analysis, remote-health probing, and the stale/analysed counters keep running for hidden repositories, so the footer and the fast-forward block are unaffected. Rendering and analysis modules do not change.
+**Architecture:** Filter at the CLI's emission point. A shared `_emit_repo` helper skips `render_repo` when quiet is set and no visible finding remains. For `merged`, unmerged statuses are removed from the visible set before rendering, while `[NO BASE]` and `[UNREACHABLE]` stay. Fetching, analysis, remote-health probing, and the stale/analysed counters keep running for hidden repositories, so the footer and the fast-forward block are unaffected. Analysis and rendering modules do not change.
 
 **Tech Stack:** Python 3.14, typer, pytest, ruff, pyright strict, uv.
 
 **Spec:** `docs/superpowers/specs/2026-11-03-quiet-flag-design.md`
+
+> Revised 2026-11-03: `merged --quiet` now hides `[NOT MERGED]`, `[CONFLICTS]`, and `[UNKNOWN]`, matching `git-merged-scan.sh -q`. This deliberately changes the original rule that any finding keeps a repository visible. `[NO BASE]` and `[UNREACHABLE]` remain visible. `local` and `remote` are unchanged. Issue #6 records the same rule.
 
 ## Global Constraints
 
@@ -16,7 +18,9 @@
 - The report stays markdown with no ANSI escapes and no tables.
 - Read-only behaviour is unchanged: `local --update` remains the only write.
 - Findings never change the exit code. `0` means the run completed.
-- Quiet hides only repositories whose `findings` list is empty. `[OK]` findings count, so a repository with one is printed in full.
+- Quiet hides a repository when no visible finding remains.
+- For `local` and `remote`, every finding is visible, so `[OK]` still keeps a repository printed.
+- For `merged`, `[NOT MERGED]`, `[CONFLICTS]`, and `[UNKNOWN]` are hidden; `[SAFE TO DELETE]`, `[UNSAFE TO DELETE]`, `[NO BASE]`, and `[UNREACHABLE]` stay visible.
 - The header, the stale warning, and a non-empty `## fast-forwarded` block always print.
 - The stale warning counts every analysed repository, including hidden ones.
 - Non-quiet output is byte-for-byte unchanged.
@@ -26,7 +30,10 @@
 ## Review Focus
 
 - Every repository clean plus `--no-fetch`: header and stale warning only, with no repository sections, and the warning still counting the hidden repositories.
-- A repository whose only finding is `[OK]`: still printed in full, because any finding counts.
+- A repository whose only finding is `[OK]`: still printed in full under `local` and `remote`, because every finding is visible there.
+- `merged --quiet` with only unmerged branches: header only, no repository section.
+- `merged --quiet` with one merged and one unmerged branch: the section names only the merged branch.
+- `merged --quiet` in a repository with no base or an unreachable remote: `[NO BASE]` and `[UNREACHABLE]` still print, and the repository stays visible when those are the only findings.
 - `local --quiet --update` where the fast-forwarded branch produces no finding: the section is hidden but `## fast-forwarded` still prints.
 - `remote --quiet` with a filter that matches nothing versus one that matches: header-only versus a full section, since every `remote` finding is `[OK]`.
 - An analysis failure during a quiet run: the `error analysing ...` line still reaches stderr, the run continues, and the exit code stays 0.
@@ -43,7 +50,8 @@
 **Interfaces:**
 - Consumes: existing `RepoReport.findings`, `render_repo`, `emit`.
 - Produces:
-  - `_emit_repo(report: RepoReport, root: Path, quiet: bool) -> None`
+  - `_emit_repo(report: RepoReport, root: Path, quiet: bool, hide_unmerged: bool = False) -> None`
+  - `QUIET_HIDDEN_STATUSES: frozenset[Status]`
   - `local(..., quiet: bool = typer.Option(False, "--quiet", "-q", ...))`
 
 - [ ] **Step 1: Write the failing tests**
@@ -167,19 +175,39 @@ Expected: the behavior tests fail because `--quiet` is not a known option, and t
 
 - [ ] **Step 3: Implement the helper and the `local` flag**
 
-In `git_ferret/cli.py`, add above `local`:
+In `git_ferret/cli.py`, import `replace` from `dataclasses` and add `Status` to the
+`git_ferret.models` import. Then add above `local`:
 
 ```python
-def _emit_repo(report: RepoReport, root: Path, quiet: bool) -> None:
+QUIET_HIDDEN_STATUSES = frozenset({Status.NOT_MERGED, Status.CONFLICTS, Status.UNKNOWN})
+
+
+def _emit_repo(
+    report: RepoReport, root: Path, quiet: bool, hide_unmerged: bool = False
+) -> None:
     """Print one repository's section, unless quiet hides it.
 
     The filter lives here, after analysis and after the stale and analysed
     counters have been updated, so a hidden repository still counts in the
     footer and still contributes its findings to nothing else. Rendering is
     unchanged; quiet removes whole sections, never lines.
+
+    ``hide_unmerged`` is the one command-specific rule: ``merged --quiet``
+    drops branches that are not merged, but keeps repository-level warnings
+    such as ``[NO BASE]`` and ``[UNREACHABLE]``.
     """
-    if quiet and not report.findings:
+    if not quiet:
+        emit(render_repo(report, root))
         return
+    visible = (
+        [finding for finding in report.findings if finding.status not in QUIET_HIDDEN_STATUSES]
+        if hide_unmerged
+        else report.findings
+    )
+    if not visible:
+        return
+    if hide_unmerged:
+        report = replace(report, findings=visible)
     emit(render_repo(report, root))
 ```
 
@@ -224,11 +252,11 @@ git commit -m "feat(cli): add quiet filtering to local"
 - Test: `tests/test_cli.py`
 
 **Interfaces:**
-- Consumes: `_emit_repo(report, root, quiet)` and the `_clean_clone(tmp_path, dest)` test helper from Task 1.
+- Consumes: `_emit_repo(report, root, quiet, hide_unmerged=False)`, `QUIET_HIDDEN_STATUSES`, and the `_clean_clone(tmp_path, dest)` test helper from Task 1.
 - Produces:
   - `remote(..., quiet: bool = typer.Option(False, "--quiet", "-q", ...))`
   - `merged(..., quiet: bool = typer.Option(False, "--quiet", "-q", ...))`
-  - `_run(analysis, path, no_fetch, author, branch_filter, quiet) -> None`
+  - `_run(analysis, path, no_fetch, author, branch_filter, quiet, hide_unmerged=False) -> None`
   - `run_command(command, path, no_fetch, author=None, branch_filter=None, quiet=False) -> None`
 
 - [ ] **Step 1: Write the failing tests**
@@ -259,6 +287,48 @@ def _clone_with_merged_branch(tmp_path: Path, dest: Path) -> Path:
     return clone_local(src, dest)
 
 
+def _clone_with_unmerged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `open` has work main does not contain."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "open")
+    (src / "open.txt").write_text("open\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_merged_and_unmerged_branches(tmp_path: Path, dest: Path) -> Path:
+    """A clone with one merged branch and one live branch."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "done")
+    (src / "f.txt").write_text("a\ndone\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    run(src, "merge", "--squash", "done")
+    commit(src, "merge done")
+    run(src, "checkout", "-b", "open")
+    (src / "open.txt").write_text("open\n")
+    commit(src, "open work")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_without_base(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose only branch is `trunk`: no main or master to compare."""
+    src = tmp_path / "fixtures" / f"{dest.name}-src"
+    src.mkdir(parents=True)
+    run(src, "init", "-b", "trunk")
+    run(src, "config", "user.name", "Dev")
+    run(src, "config", "user.email", "dev@example.com")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    return clone_local(src, dest)
+
+
 def test_remote_quiet_hides_a_repository_with_no_matching_branches(tmp_path: Path):
     clone = _clean_clone(tmp_path, tmp_path / "clean")
     res = runner.invoke(build_parser(), ["remote", str(clone), "--quiet"])
@@ -281,12 +351,46 @@ def test_merged_quiet_hides_a_repository_with_nothing_merged(tmp_path: Path):
     assert res.stdout == "# git-ferret\n\n"
 
 
+def test_merged_quiet_hides_a_repository_with_only_unmerged_branches(tmp_path: Path):
+    clone = _clone_with_unmerged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
 def test_merged_quiet_keeps_a_repository_with_a_verdict(tmp_path: Path):
     clone = _clone_with_merged_branch(tmp_path, tmp_path / "clean")
     res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
     assert res.exit_code == 0, res.output
     assert "## .\n" in res.stdout
     assert "`origin/done` [SAFE TO DELETE]" in res.stdout
+
+
+def test_merged_quiet_drops_unmerged_lines_from_a_visible_repository(tmp_path: Path):
+    clone = _clone_with_merged_and_unmerged_branches(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "`origin/done` [SAFE TO DELETE]" in res.stdout
+    assert "`origin/open`" not in res.stdout
+    assert "[NOT MERGED]" not in res.stdout
+
+
+def test_merged_quiet_keeps_no_base_visible(tmp_path: Path):
+    clone = _clone_without_base(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "[NO BASE]" in res.stdout
+
+
+def test_merged_quiet_keeps_unreachable_visible_while_hiding_unmerged(tmp_path: Path):
+    clone = _clone_with_unmerged_branch(tmp_path, tmp_path / "clean")
+    run(clone, "remote", "set-url", "origin", str(tmp_path / "missing"))
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "[UNREACHABLE]" in res.stdout
+    assert "[NOT MERGED]" not in res.stdout
 ```
 
 Add to `tests/test_cli.py`:
@@ -324,7 +428,7 @@ Pass it to `_run` in both commands:
 ```
 
 ```python
-    _run(ANALYSES["merged"], path, no_fetch, author, branch, quiet)
+    _run(ANALYSES["merged"], path, no_fetch, author, branch, quiet, hide_unmerged=True)
 ```
 
 Add the parameter to `_run`:
@@ -337,13 +441,14 @@ def _run(
     author: list[str] | None,
     branch_filter: str | list[str] | None,
     quiet: bool,
+    hide_unmerged: bool = False,
 ) -> None:
 ```
 
 Replace `emit(render_repo(report, root))` inside `_run` with:
 
 ```python
-        _emit_repo(report, root, quiet)
+        _emit_repo(report, root, quiet, hide_unmerged)
 ```
 
 Add a trailing parameter to `run_command` and forward it:
@@ -358,7 +463,15 @@ def run_command(
     quiet: bool = False,
 ) -> None:
     """Run one named subcommand's analysis over *path*."""
-    _run(ANALYSES[command], path, no_fetch, author or [], branch_filter, quiet)
+    _run(
+        ANALYSES[command],
+        path,
+        no_fetch,
+        author or [],
+        branch_filter,
+        quiet,
+        hide_unmerged=command == "merged",
+    )
 ```
 
 - [ ] **Step 4: Run the tests to verify they pass**
@@ -394,7 +507,7 @@ git commit -m "feat(cli): add quiet filtering to remote and merged"
 In the table under `## Command reference`, add after the `--no-fetch` row:
 
 ```markdown
-| `--quiet`, `-q` | `local`, `remote`, `merged` | Print only repositories with findings. |
+| `--quiet`, `-q` | `local`, `remote`, `merged` | Hide clean repositories; `merged` also hides unmerged branches. |
 ```
 
 - [ ] **Step 2: Describe what quiet keeps**
@@ -402,9 +515,11 @@ In the table under `## Command reference`, add after the `--no-fetch` row:
 Under `## Using it regularly`, after the sentence about findings not changing the exit code, add:
 
 ```markdown
-`--quiet` suppresses the section for any repository with no findings. The header, the stale
-warning, and a non-empty `## fast-forwarded` block still print, so a quiet run is still a complete
-report of what happened.
+`--quiet` suppresses the section for any repository with no visible findings. For `merged` it also
+hides `[NOT MERGED]`, `[CONFLICTS]`, and `[UNKNOWN]` branches, so only deletion candidates and
+merged-but-unsafe branches remain. `[NO BASE]` and `[UNREACHABLE]` always print. The header, the
+stale warning, and a non-empty `## fast-forwarded` block still print, so a quiet run is still a
+complete report of what happened.
 ```
 
 - [ ] **Step 3: Verify the docs and commit**
