@@ -7,8 +7,10 @@ Three subcommands, each independently runnable. All default to fetching and all
 accept ``--no-fetch``, so the intended rhythm is one fetching run followed by
 cheap repeat runs against local state.
 
-Report-only: the sole write this tool performs is ``git merge --ff-only``
-behind ``local --update``, which is off unless asked for.
+Report-only: the sole writes this tool performs are ``git merge --ff-only`` in a
+clean worktree and a compare-and-swap ``git update-ref`` for a clean branch that
+is not checked out, both behind ``local --update``, which is off unless asked
+for.
 """
 
 from __future__ import annotations
@@ -106,7 +108,10 @@ def local(
     update: bool = typer.Option(
         False,
         "--update",
-        help="Fast-forward clean worktrees. This is the only write this tool performs.",
+        help=(
+            "Fast-forward clean worktrees and unchecked-out branches. "
+            "This is the only write this tool performs."
+        ),
     ),
 ) -> None:
     """Branches checked out locally, worktrees, dirty state."""
