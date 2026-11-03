@@ -85,11 +85,17 @@ def _passes_filters(
     identities: list[str],
     branch_filter: str | list[str] | None,
 ) -> bool:
-    """Apply OR within branch patterns and AND with the optional author filter."""
+    """Apply OR within branch patterns and AND with the optional author filter.
+
+    Branch patterns match case-insensitively, so ``--branch abc`` finds
+    ``origin/ABC-123``. Author matching is case-insensitive too, in
+    :func:`git_ferret.config.identity_matches`.
+    """
     patterns = split_identities(
         [branch_filter] if isinstance(branch_filter, str) else branch_filter or []
     )
-    if patterns and not any(pattern in ref for pattern in patterns):
+    folded_ref = ref.casefold()
+    if patterns and not any(pattern.casefold() in folded_ref for pattern in patterns):
         return False
     if identities:
         # The range matters: the user's commits sit in the base history and are

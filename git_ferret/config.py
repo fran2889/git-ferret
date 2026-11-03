@@ -167,12 +167,15 @@ def identity_matches(commits_author_strings: Iterable[str], identities: list[str
     Substring, not equality: the user configures a fragment such as an email
     address and it must match the full ``Name <email>`` git records.
 
-    Blank identities are ignored here as well as at resolution, because the
-    empty string is a substring of every author and would otherwise report
-    every branch in the repository as the user's own.
+    Matching is case-insensitive, so ``--author FRAN@Z.COM`` finds commits by
+    ``Fran <fran@z.com>``. Blank identities are ignored here as well as at
+    resolution, because the empty string is a substring of every author and
+    would otherwise report every branch in the repository as the user's own.
     """
-    usable = [i for i in identities if i and i.strip()]
+    usable = [
+        identity.strip().casefold() for identity in identities if identity and identity.strip()
+    ]
     if not usable:
         return False
-    authors = list(commits_author_strings)
+    authors = [author.casefold() for author in commits_author_strings]
     return any(identity in author for identity in usable for author in authors)
