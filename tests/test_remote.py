@@ -303,7 +303,7 @@ def _reported_names(output: str) -> set[str]:
         (["ABC", "", " , "], {"origin/ABC-done"}),
         (["", " , "], {"origin/ABC-done", "origin/DEF-open", "origin/ZZZ-open"}),
         (["ABC,ABC", "ABC"], {"origin/ABC-done"}),
-        (["abc", "missing"], {"origin/ABC-done"}),
+        pytest.param(["abc", "missing"], {"origin/ABC-done"}, id="case-insensitive"),
     ],
 )
 def test_branch_filters_match_any_pattern(
@@ -343,16 +343,6 @@ def test_author_filter_is_case_insensitive(filtered_repo: Path, command: str):
         "origin/DEF-open",
         "origin/ZZZ-open",
     }
-
-
-@pytest.mark.parametrize("command", ["remote", "merged"])
-def test_branch_filter_is_case_insensitive(filtered_repo: Path, command: str):
-    result = runner.invoke(
-        build_parser(),
-        [command, str(filtered_repo), "--no-fetch", "--branch", "abc"],
-    )
-    assert result.exit_code == 0, result.output
-    assert _reported_names(result.stdout) == {"origin/ABC-done"}
 
 
 @pytest.mark.parametrize("command", ["remote", "merged"])
