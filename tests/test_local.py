@@ -3,12 +3,17 @@
 
 """Tests for local branch and worktree analysis."""
 
+import os
+from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 from git_ferret.analysis.local import analyse_local
 from git_ferret.config import Config
 from git_ferret.gitops import resolve_base_ref
-from git_ferret.models import RepoReport, Status
+from git_ferret.models import Finding, RepoReport, Status
 from tests.helpers import add_branch_with_missing_commit, commit, make_repo, run
 
 
@@ -237,3 +242,153 @@ def test_a_branch_with_no_readable_commit_is_reported_without_an_age(tmp_path: P
     ghost = next(f for f in rep.findings if f.branch == "ghost")
     assert ghost.status is Status.NOT_PUSHED
     assert "last commit" not in ghost.detail
+
+
+def _make_shelf(repo: Path, name: str, modified: float | None = None) -> Path:
+    shelf = repo / ".idea" / "shelf" / name
+    shelf.mkdir(parents=True)
+    (shelf / "shelved.patch").write_text("diff --git a/f.txt b/f.txt\n", encoding="utf-8")
+    if modified is not None:
+        os.utime(shelf, (modified, modified))
+    return shelf
+
+
+def _shelf_findings(rep: RepoReport) -> list[Finding]:
+    return [f for f in rep.findings if f.status is Status.SHELF]
+
+
+def test_reports_a_shelf_by_name_and_mtime(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    stamp = 1_700_000_000
+    _make_shelf(repo, "my-shelf", modified=stamp)
+    expected = datetime.fromtimestamp(stamp).strftime("%Y-%m-%d %H:%M")
+    shelves = _shelf_findings(_report(repo))
+    assert len(shelves) == 1
+    assert 'IntelliJ shelf "my-shelf"' in shelves[0].detail
+    assert f"modified {expected}" in shelves[0].detail
+
+
+def test_a_shelf_whose_timestamp_cannot_be_read_is_reported_as_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    shelf = _make_shelf(repo, "my-shelf")
+    real_stat = Path.stat
+
+    def unreadable_shelf(self: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        if self == shelf:
+            raise OSError("shelf statistics are unreadable")
+        return real_stat(self, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "stat", unreadable_shelf)
+    shelves = _shelf_findings(_report(repo))
+    assert len(shelves) == 1
+    assert shelves[0].detail == (
+        'IntelliJ shelf "my-shelf", modified unknown, contents not inspected'
+    )
+
+
+def test_shelf_finding_says_contents_were_not_inspected(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    _make_shelf(repo, "my-shelf")
+    assert "contents not inspected" in _shelf_findings(_report(repo))[0].detail
+
+
+def test_ignores_auto_generated_shelves(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    _make_shelf(repo, "Uncommitted_changes_before_Checkout_at_2026-11-03")
+    assert _shelf_findings(_report(repo)) == []
+
+
+def test_absent_shelf_directory_reports_nothing(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    assert _shelf_findings(_report(repo)) == []
+
+
+def test_reports_a_shelf_in_a_linked_worktree(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    linked = tmp_path / "linked"
+    run(repo, "worktree", "add", "-b", "linked-branch", str(linked))
+    _make_shelf(linked, "linked-shelf")
+    shelves = _shelf_findings(_report(repo))
+    assert len(shelves) == 1
+    assert 'IntelliJ shelf "linked-shelf"' in shelves[0].detail
+    assert shelves[0].branch == "linked-branch"
+
+
+def test_reports_one_finding_per_shelf_in_name_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    _make_shelf(repo, "zebra")
+    _make_shelf(repo, "alpha")
+    shelf_root = repo / ".idea" / "shelf"
+    real_iterdir = Path.iterdir
+
+    def reversed_shelf_listing(self: Path) -> Iterator[Path]:
+        entries = list(real_iterdir(self))
+        if self == shelf_root:
+            entries.reverse()
+        return iter(entries)
+
+    # A real directory listing does not promise an order, and on some
+    # filesystems it is already alphabetical. Reverse it so an implementation
+    # that forgets to sort cannot pass by accident.
+    monkeypatch.setattr(Path, "iterdir", reversed_shelf_listing)
+    names = [f.detail.split('"')[1] for f in _shelf_findings(_report(repo))]
+    assert names == ["alpha", "zebra"]
+
+
+def test_a_loose_file_under_the_shelf_directory_is_not_a_shelf(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    shelf_root = repo / ".idea" / "shelf"
+    shelf_root.mkdir(parents=True)
+    (shelf_root / "shelved.patch").write_text("diff --git a/f.txt b/f.txt\n", encoding="utf-8")
+    assert _shelf_findings(_report(repo)) == []
+
+
+def test_a_shelf_path_that_is_a_file_reports_nothing(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    idea = repo / ".idea"
+    idea.mkdir()
+    (idea / "shelf").write_text("not a directory\n", encoding="utf-8")
+    assert _shelf_findings(_report(repo)) == []
+
+
+def test_a_shelf_name_with_spaces_is_preserved(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    _make_shelf(repo, "before refactor")
+    assert 'IntelliJ shelf "before refactor"' in _shelf_findings(_report(repo))[0].detail
+
+
+def test_reports_a_shelf_in_a_detached_linked_worktree(tmp_path: Path):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    linked = tmp_path / "detached"
+    run(repo, "worktree", "add", "--detach", str(linked))
+    _make_shelf(linked, "detached-shelf")
+    shelves = _shelf_findings(_report(repo))
+    assert len(shelves) == 1
+    assert 'IntelliJ shelf "detached-shelf"' in shelves[0].detail
+    assert shelves[0].branch == str(linked)

@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from git_ferret.config import Config, is_always_excluded
@@ -18,6 +19,9 @@ from git_ferret.gitops import (
 from git_ferret.models import BranchInfo, Finding, RepoReport, Status, WorktreeInfo
 
 NO_BASE_REASON = "no base branch (neither origin/main, origin/master, main nor master)"
+SHELF_ROOT = Path(".idea") / "shelf"
+AUTO_SHELF_PREFIX = "Uncommitted_changes_before_"
+SHELF_TIMESTAMP_FORMAT = "%Y-%m-%d %H:%M"
 
 
 def branch_finding(branch: BranchInfo) -> Finding | None:
@@ -136,6 +140,7 @@ def analyse_local(repo: Path, config: Config, base_ref: str | None) -> RepoRepor
                     detail=detail,
                 )
             )
+        _report_shelves(path, branch_name, report)
 
     if base_ref is None:
         # A missing base is reported, but it does not skip anything here: local
@@ -165,6 +170,32 @@ def analyse_local(repo: Path, config: Config, base_ref: str | None) -> RepoRepor
             report.findings.append(finding)
 
     return report
+
+
+def _report_shelves(worktree: Path, branch: str | None, report: RepoReport) -> None:
+    """Report IntelliJ shelves: work parked where no git command can see it."""
+    try:
+        entries = sorted((worktree / SHELF_ROOT).iterdir(), key=lambda entry: entry.name)
+    except OSError:
+        # No shelf directory, or one that cannot be read. Neither is a shelf.
+        return
+    for shelf in entries:
+        if not shelf.is_dir() or shelf.name.startswith(AUTO_SHELF_PREFIX):
+            continue
+        try:
+            modified = datetime.fromtimestamp(shelf.stat().st_mtime).strftime(
+                SHELF_TIMESTAMP_FORMAT
+            )
+        except OSError:
+            modified = "unknown"
+        report.findings.append(
+            Finding(
+                branch=branch or str(worktree),
+                status=Status.SHELF,
+                detail=f'IntelliJ shelf "{shelf.name}", modified {modified}, '
+                "contents not inspected",
+            )
+        )
 
 
 def _report_stashes(repo: Path, report: RepoReport) -> None:
