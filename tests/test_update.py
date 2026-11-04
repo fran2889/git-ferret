@@ -16,13 +16,10 @@ from typer.testing import CliRunner
 from git_ferret.cli import (
     _fast_forward_ref,  # pyright: ignore[reportPrivateUsage]
     _move_ref,  # pyright: ignore[reportPrivateUsage]
-    _upstream_ref,  # pyright: ignore[reportPrivateUsage]
     build_parser,
     fast_forward_branches,
 )
 from git_ferret.gitcmd import run_git
-from git_ferret.gitops import list_branches
-from git_ferret.models import BranchInfo
 from tests.helpers import clone_local, commit, make_repo, run
 
 
@@ -150,6 +147,29 @@ def test_a_local_branch_named_like_the_upstream_does_not_shadow_it(tmp_path: Pat
     assert run(clone, "rev-parse", "feat").stdout.strip() == upstream
 
 
+def test_a_nonstandard_fetch_refspec_uses_the_real_upstream(tmp_path: Path):
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "feat")
+    clone = clone_local(src, tmp_path / "clone")
+    # Move the remote-tracking refs out of refs/remotes/origin/*, so the
+    # hardcoded origin/feat ref is stale while the real upstream moves.
+    run(clone, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/upstream/*")
+    run(clone, "fetch", "--all", "--prune")
+    run(clone, "branch", "--track", "feat", "upstream/feat")
+    run(src, "checkout", "feat")
+    (src / "f.txt").write_text("a\nremote\n")
+    commit(src, "remote work")
+    run(src, "checkout", "main")
+    run(clone, "fetch", "--all", "--prune")
+    upstream = run(clone, "rev-parse", "refs/remotes/upstream/feat").stdout.strip()
+    assert run(clone, "rev-parse", "refs/remotes/origin/feat").stdout.strip() != upstream
+
+    assert fast_forward_branches(clone) == ["feat"]
+    assert run(clone, "rev-parse", "feat").stdout.strip() == upstream
+
+
 def test_a_ref_that_moved_after_it_was_read_is_not_clobbered(tmp_path: Path):
     repo = make_repo(tmp_path / "repo")
     (repo / "f.txt").write_text("a\n")
@@ -205,25 +225,26 @@ def test_a_symbolic_branch_is_not_dereferenced_to_move_a_remote_tracking_ref(tmp
 
 def test_a_branch_checked_out_after_the_snapshot_is_not_moved(tmp_path: Path):
     clone = _ref_only_behind_clone(tmp_path)
-    feat = next(branch for branch in list_branches(clone) if branch.name == "feat")
     linked = tmp_path / "linked"
     run(clone, "worktree", "add", str(linked), "feat")
     before = run(clone, "rev-parse", "feat").stdout.strip()
 
-    assert _fast_forward_ref(clone, feat) is False
+    assert _fast_forward_ref(clone, "feat", "refs/remotes/origin/feat") is False
     assert run(clone, "rev-parse", "feat").stdout.strip() == before
 
 
-def test_upstream_ref_refuses_a_local_upstream():
-    branch = BranchInfo(name="feat", remote=".", upstream="main")
+def test_a_local_upstream_is_not_moved(tmp_path: Path):
+    repo = make_repo(tmp_path / "repo")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    run(repo, "branch", "feat")
+    run(repo, "branch", "--set-upstream-to=main", "feat")
+    before = run(repo, "rev-parse", "feat").stdout.strip()
+    (repo / "f.txt").write_text("a\nmore\n")
+    commit(repo, "main work")
 
-    assert _upstream_ref(branch) is None
-
-
-def test_upstream_ref_refuses_a_malformed_prefix():
-    branch = BranchInfo(name="feat", remote="origin", upstream="refs/heads/main")
-
-    assert _upstream_ref(branch) is None
+    assert fast_forward_branches(repo) == []
+    assert run(repo, "rev-parse", "feat").stdout.strip() == before
 
 
 def test_an_unreadable_worktree_is_not_ref_updated(tmp_path: Path):

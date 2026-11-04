@@ -35,9 +35,9 @@ from git_ferret.analysis.remote import (
 )
 from git_ferret.config import Config, ConfigError, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
-from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
-from git_ferret.gitops import fetch_all, list_branches, resolve_base_ref
-from git_ferret.models import BranchInfo, RepoReport
+from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git, run_git_text
+from git_ferret.gitops import fetch_all, resolve_base_ref
+from git_ferret.models import RepoReport
 from git_ferret.report import (
     display_path,
     emit,
@@ -465,21 +465,26 @@ def _fast_forward_worktrees(worktrees: list[tuple[Path, str | None]]) -> list[st
 
 def _fast_forward_refs(repo: Path, checked_out: set[str]) -> list[str]:
     """Move unchecked-out branches whose upstream descends from their tip."""
+    refs = run_git_text(repo, "for-each-ref", "--format=%(refname)%00%(upstream)", "refs/heads/")
     updated: list[str] = []
-    for branch in list_branches(repo):
-        if branch.name in checked_out:
+    for line in refs.splitlines():
+        ref, _, upstream = line.partition("\0")
+        branch = ref.removeprefix("refs/heads/")
+        if not branch or branch in checked_out:
             continue
-        if _fast_forward_ref(repo, branch):
-            updated.append(branch.name)
+        # %(upstream) is the full ref the remote's fetch refspec maps to, so a
+        # local branch cannot shadow it. A local or tag upstream is not a
+        # remote-tracking ref, and the ref-only pass does not update it.
+        if not upstream.startswith("refs/remotes/"):
+            continue
+        if _fast_forward_ref(repo, branch, upstream):
+            updated.append(branch)
     return updated
 
 
-def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
+def _fast_forward_ref(repo: Path, branch: str, upstream: str) -> bool:
     """Move one unchecked-out branch when the move is a genuine fast-forward."""
-    upstream = _upstream_ref(branch)
-    if upstream is None:
-        return False
-    old_proc = run_git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch.name}")
+    old_proc = run_git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")
     if old_proc.returncode != 0 or not old_proc.stdout.strip():
         return False
     new_proc = run_git(repo, "rev-parse", "--verify", "--quiet", upstream)
@@ -498,7 +503,7 @@ def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
     # than the branch itself. Refuse anything symbolic, and fail closed when
     # the check cannot prove the ref is direct: `symbolic-ref --quiet` exits 0
     # for a symbolic ref and 1 for a direct one.
-    symbolic = run_git(repo, "symbolic-ref", "--quiet", f"refs/heads/{branch.name}")
+    symbolic = run_git(repo, "symbolic-ref", "--quiet", f"refs/heads/{branch}")
     if symbolic.returncode != 1:
         return False
     # Revalidate checked-out membership at the write boundary, immediately
@@ -506,27 +511,9 @@ def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
     # then and here: another process may have checked this branch out or added a
     # worktree for it, and git has no atomic "ref is not checked out" lock, so
     # this narrows the window to the write itself.
-    if branch.name in {b for _, b in list_worktrees(repo) if b is not None}:
+    if branch in {b for _, b in list_worktrees(repo) if b is not None}:
         return False
-    return _move_ref(repo, branch.name, new, old)
-
-
-def _upstream_ref(branch: BranchInfo) -> str | None:
-    """The full remote-tracking ref for *branch*, or None without one.
-
-    A short upstream name can be shadowed by a local branch of the same name,
-    so the ref-only path resolves the full ``refs/remotes/...`` form; anything
-    this cannot name unambiguously is refused rather than guessed.
-    """
-    if not branch.remote or not branch.upstream:
-        return None
-    if branch.remote == ".":
-        return None
-    prefix = f"{branch.remote}/"
-    if not branch.upstream.startswith(prefix):
-        return None
-    short = branch.upstream[len(prefix) :]
-    return f"refs/remotes/{branch.remote}/{short}"
+    return _move_ref(repo, branch, new, old)
 
 
 def _move_ref(repo: Path, branch: str, new: str, old: str) -> bool:
