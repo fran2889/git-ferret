@@ -166,11 +166,12 @@ def list_branches(repo: Path) -> list[BranchInfo]:
     is not "no upstream": it is a deleted upstream, which is a different
     finding and the reason pruning matters.
     """
-    names = run_git_text(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+    refs = run_git_text(repo, "for-each-ref", "--format=%(refname)", "refs/heads/")
     branches: list[BranchInfo] = []
-    for name in (n.strip() for n in names.splitlines()):
-        if not name:
+    for ref in (r.strip() for r in refs.splitlines()):
+        if not ref:
             continue
+        name = ref.removeprefix("refs/heads/")
         remote, upstream = configured_upstream(repo, name)
         upstream_gone = upstream is not None and not _ref_exists(repo, upstream)
 
@@ -183,7 +184,7 @@ def list_branches(repo: Path) -> list[BranchInfo]:
             comparison = upstream if not upstream_gone else _merge_ref(repo, name)
             if comparison and _ref_exists(repo, comparison):
                 counts = run_git(
-                    repo, "rev-list", "--left-right", "--count", f"{name}...{comparison}"
+                    repo, "rev-list", "--left-right", "--count", f"{ref}...{comparison}"
                 )
                 if counts.returncode == 0:
                     # Output is tab-separated: <ahead>\t<behind>.
@@ -200,7 +201,7 @@ def list_branches(repo: Path) -> list[BranchInfo]:
                 ahead=ahead,
                 behind=behind,
                 has_upstream=bool(upstream),
-                last_commit_rel=_last_commit_relative(repo, name),
+                last_commit_rel=_last_commit_relative(repo, ref),
             )
         )
     return branches
