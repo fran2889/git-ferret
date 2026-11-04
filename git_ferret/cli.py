@@ -479,14 +479,6 @@ def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
     upstream = _upstream_ref(branch)
     if upstream is None:
         return False
-    # `git update-ref` dereferences a symbolic ref, so a symbolic
-    # `refs/heads/<branch>` would move its target (a checked-out `main`, or a
-    # remote-tracking ref) rather than the branch itself. Refuse anything
-    # symbolic, and fail closed when the check cannot prove the ref is direct:
-    # `symbolic-ref --quiet` exits 0 for a symbolic ref and 1 for a direct one.
-    symbolic = run_git(repo, "symbolic-ref", "--quiet", f"refs/heads/{branch.name}")
-    if symbolic.returncode != 1:
-        return False
     old_proc = run_git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch.name}")
     if old_proc.returncode != 0 or not old_proc.stdout.strip():
         return False
@@ -499,6 +491,15 @@ def _fast_forward_ref(repo: Path, branch: BranchInfo) -> bool:
         return False
     ancestor = run_git(repo, "merge-base", "--is-ancestor", old, new)
     if ancestor.returncode != 0:
+        return False
+    # Both write-boundary checks run as late as possible. `git update-ref`
+    # dereferences a symbolic ref, so a symbolic `refs/heads/<branch>` would
+    # move its target (a checked-out `main`, or a remote-tracking ref) rather
+    # than the branch itself. Refuse anything symbolic, and fail closed when
+    # the check cannot prove the ref is direct: `symbolic-ref --quiet` exits 0
+    # for a symbolic ref and 1 for a direct one.
+    symbolic = run_git(repo, "symbolic-ref", "--quiet", f"refs/heads/{branch.name}")
+    if symbolic.returncode != 1:
         return False
     # Revalidate checked-out membership at the write boundary, immediately
     # before the CAS. The snapshot the caller filtered with can go stale between
