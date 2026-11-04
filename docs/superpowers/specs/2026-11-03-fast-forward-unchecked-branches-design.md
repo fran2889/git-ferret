@@ -126,3 +126,16 @@ location, which resolves the issue's open question.
   `remote` and `upstream`.
 - Exact fixture construction for the ref-only tests.
 - Wording of the README and help-text changes, within the decisions above.
+
+## Review updates
+
+- The ref-only pass is skipped for a repository with a rebase, `git am`, or bisect in progress.
+  Those operations detach HEAD, so the branch they are working on would otherwise look
+  unchecked-out.
+- Branch upstreams are read with `%(upstream)` instead of rebuilding
+  `refs/remotes/<remote>/<short>`. This follows a custom fetch refspec and refuses local or tag
+  upstreams.
+- Branch names come from `%(refname)`, so a tag sharing a branch name cannot hide the branch or its
+  configured upstream.
+- The symbolic-ref and checked-out checks run at the write boundary, immediately before the
+  compare-and-swap.
