@@ -249,8 +249,11 @@ def test_a_local_upstream_is_not_moved(tmp_path: Path):
 
 def test_an_unreadable_worktree_is_not_ref_updated(tmp_path: Path):
     clone = _ref_only_behind_clone(tmp_path)
+    # Put the linked worktree on another branch, so `feat` is not checked out
+    # and only the unreadable worktree can keep the ref-only pass from moving it.
+    run(clone, "branch", "other")
     linked = tmp_path / "linked"
-    run(clone, "worktree", "add", str(linked), "feat")
+    run(clone, "worktree", "add", str(linked), "other")
     shutil.rmtree(linked)
     before = run(clone, "rev-parse", "feat").stdout.strip()
 
