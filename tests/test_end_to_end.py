@@ -3,6 +3,7 @@
 
 """End-to-end coverage: all three subcommands over a realistic repository tree."""
 
+import subprocess
 from pathlib import Path
 from typing import TextIO
 
@@ -45,6 +46,130 @@ def _tree(tmp_path: Path):
 
     make_repo(tmp_path / "solo")  # a repository with no remote at all
     return tmp_path
+
+
+def _clean_clone(tmp_path: Path, dest: Path) -> Path:
+    """A freshly fetched clone with only `main`: nothing for a scan to report."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    return clone_local(src, dest)
+
+
+def _with_unpushed_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone carrying one local branch that exists nowhere on the remote."""
+    clone = _clean_clone(tmp_path, dest)
+    run(clone, "checkout", "-b", "local-only", "origin/main")
+    (clone / "mine.txt").write_text("mine\n")
+    commit(clone, "local only")
+    run(clone, "checkout", "main")
+    return clone
+
+
+def _clone_with_branch(tmp_path: Path, dest: Path, name: str) -> Path:
+    """A clone whose remote carries branch *name* with a commit on it."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", name)
+    (src / f"{name}.txt").write_text(f"{name}\n")
+    commit(src, f"work on {name}")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_merged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `done` is already squashed into main."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "done")
+    (src / "f.txt").write_text("a\ndone\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    run(src, "merge", "--squash", "done")
+    commit(src, "merge done")
+    return clone_local(src, dest)
+
+
+def _clone_with_unmerged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `open` has work main does not contain."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "open")
+    (src / "open.txt").write_text("open\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_merged_and_unmerged_branches(tmp_path: Path, dest: Path) -> Path:
+    """A clone with one merged branch and one live branch."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "done")
+    (src / "f.txt").write_text("a\ndone\n")
+    commit(src, "work")
+    run(src, "checkout", "main")
+    run(src, "merge", "--squash", "done")
+    commit(src, "merge done")
+    run(src, "checkout", "-b", "open")
+    (src / "open.txt").write_text("open\n")
+    commit(src, "open work")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_conflicting_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `conflict` cannot merge into main."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\nb\nc\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "conflict")
+    (src / "f.txt").write_text("SIDE-A\nb\nc\n")
+    commit(src, "side a")
+    run(src, "checkout", "main")
+    (src / "f.txt").write_text("SIDE-B\nb\nc\n")
+    commit(src, "side b")
+    return clone_local(src, dest)
+
+
+def _clone_with_unknown_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `orphan` shares no history with main."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "--orphan", "orphan")
+    (src / "f.txt").write_text("zzz\n")
+    run(src, "add", "-A")
+    commit(src, "orphan")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_unsafe_merged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A merged remote branch shadowed by a local branch with unpushed work."""
+    clone = _clone_with_merged_branch(tmp_path, dest)
+    run(clone, "branch", "--no-track", "done", "origin/done")
+    run(clone, "checkout", "done")
+    (clone / "local-only.txt").write_text("mine\n")
+    commit(clone, "local only")
+    run(clone, "checkout", "main")
+    return clone
+
+
+def _clone_without_base(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose only branch is `trunk`: no main or master to compare."""
+    src = tmp_path / "fixtures" / f"{dest.name}-src"
+    src.mkdir(parents=True)
+    run(src, "init", "-b", "trunk")
+    run(src, "config", "user.name", "Dev")
+    run(src, "config", "user.email", "dev@example.com")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    return clone_local(src, dest)
 
 
 def test_local_end_to_end_emits_valid_markdown(tmp_path: Path):
@@ -217,3 +342,168 @@ def test_each_repository_is_fetched_just_before_its_section(
         ("fetch", "b"),
         ("section", "b"),
     ]
+
+
+def test_quiet_prints_only_the_header_when_every_repository_is_clean(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_short_quiet_flag_is_accepted(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "-q"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_quiet_still_prints_a_repository_with_findings(tmp_path: Path):
+    clone = _with_unpushed_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`local-only` [NOT PUSHED]" in res.stdout
+    assert "fetched " in res.stdout
+
+
+def test_quiet_keeps_a_repository_whose_only_finding_is_ok(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    run(clone, "checkout", "-b", "clean-branch", "origin/main")
+    run(clone, "checkout", "main")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`clean-branch` [OK]" in res.stdout
+
+
+def test_quiet_keeps_the_stale_warning_while_hiding_the_section(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet", "--no-fetch"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout.startswith("# git-ferret")
+    assert "## " not in res.stdout
+    assert "1 of 1 repositories" in res.stdout
+
+
+def test_quiet_still_counts_hidden_repositories_as_stale(tmp_path: Path):
+    scan = tmp_path / "scan"
+    _clean_clone(tmp_path, scan / "one")
+    _with_unpushed_branch(tmp_path, scan / "two")
+    res = runner.invoke(build_parser(), ["local", str(scan), "--quiet", "--no-fetch"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout.count("## ") == 1
+    assert "2 of 2 repositories" in res.stdout
+
+
+def test_quiet_keeps_the_fast_forwarded_block(tmp_path: Path):
+    src = make_repo(tmp_path / "fixtures" / "ff-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    clone = clone_local(src, tmp_path / "clone")
+    (src / "f.txt").write_text("a\nb\n")
+    commit(src, "second")
+
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet", "--update"])
+    assert res.exit_code == 0, res.output
+    assert "## fast-forwarded" in res.stdout
+    assert "`main` fast-forwarded" in res.stdout
+    assert "## ." not in res.stdout
+
+
+def test_quiet_does_not_hide_an_analysis_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+
+    def refuse(*args: object, **kwargs: object) -> None:
+        raise subprocess.SubprocessError("git said no")
+
+    monkeypatch.setattr(cli_module, "analyse_local", refuse)
+    res = runner.invoke(build_parser(), ["local", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "error analysing" in res.stderr
+
+
+def test_remote_quiet_hides_a_repository_with_no_matching_branches(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["remote", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_remote_quiet_keeps_a_repository_with_matching_branches(tmp_path: Path):
+    clone = _clone_with_branch(tmp_path, tmp_path / "clean", "feature")
+    res = runner.invoke(build_parser(), ["remote", str(clone), "--quiet", "--branch", "feature"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`origin/feature` [OK]" in res.stdout
+
+
+def test_merged_quiet_hides_a_repository_with_nothing_merged(tmp_path: Path):
+    clone = _clean_clone(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_keeps_a_repository_with_a_verdict(tmp_path: Path):
+    clone = _clone_with_merged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`origin/done` [SAFE TO DELETE]" in res.stdout
+
+
+def test_merged_quiet_hides_a_repository_with_only_unmerged_branches(tmp_path: Path):
+    clone = _clone_with_unmerged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_hides_conflicting_branches(tmp_path: Path):
+    clone = _clone_with_conflicting_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_hides_unknown_branches(tmp_path: Path):
+    clone = _clone_with_unknown_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_keeps_merged_but_unsafe_branches(tmp_path: Path):
+    clone = _clone_with_unsafe_merged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`origin/done` [UNSAFE TO DELETE]" in res.stdout
+
+
+def test_merged_quiet_drops_unmerged_lines_from_a_visible_repository(tmp_path: Path):
+    clone = _clone_with_merged_and_unmerged_branches(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "`origin/done` [SAFE TO DELETE]" in res.stdout
+    assert "`origin/open`" not in res.stdout
+    assert "[NOT MERGED]" not in res.stdout
+
+
+def test_merged_quiet_keeps_no_base_visible(tmp_path: Path):
+    clone = _clone_without_base(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "[NO BASE]" in res.stdout
+
+
+def test_merged_quiet_keeps_unreachable_visible_while_hiding_unmerged(tmp_path: Path):
+    clone = _clone_with_unmerged_branch(tmp_path, tmp_path / "clean")
+    run(clone, "remote", "set-url", "origin", str(tmp_path / "missing"))
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "[UNREACHABLE]" in res.stdout
+    assert "[NOT MERGED]" not in res.stdout

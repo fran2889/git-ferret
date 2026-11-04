@@ -17,6 +17,7 @@ import functools
 import subprocess
 import sys
 from collections.abc import Callable
+from dataclasses import replace
 from pathlib import Path
 
 import click
@@ -26,6 +27,7 @@ from git_ferret import __version__
 from git_ferret.analysis.health import report_remote_health
 from git_ferret.analysis.local import analyse_local
 from git_ferret.analysis.remote import (
+    UNMERGED_STATUSES,
     analyse_merged_candidates,
     analyse_remote,
 )
@@ -96,6 +98,33 @@ def _aborts_on_interrupt(func: Callable[..., None]) -> Callable[..., None]:
     return wrapper
 
 
+def _emit_repo(report: RepoReport, root: Path, quiet: bool, hide_unmerged: bool = False) -> None:
+    """Print one repository's section, unless quiet hides it.
+
+    The filter lives here, after analysis and after the stale and analysed
+    counters have been updated, so a hidden repository still counts in the
+    footer even though its section is gone. Without ``hide_unmerged``, quiet
+    removes whole sections and never lines.
+
+    ``hide_unmerged`` is the one command-specific rule: ``merged --quiet``
+    drops branches whose verdict is not merged, keeping repository-level
+    warnings such as ``[NO BASE]`` and ``[UNREACHABLE]`` visible.
+    """
+    if not quiet:
+        emit(render_repo(report, root))
+        return
+    visible = (
+        [finding for finding in report.findings if finding.status not in UNMERGED_STATUSES]
+        if hide_unmerged
+        else report.findings
+    )
+    if not visible:
+        return
+    if hide_unmerged:
+        report = replace(report, findings=visible)
+    emit(render_repo(report, root))
+
+
 @app.command()
 @_aborts_on_interrupt
 def local(
@@ -107,6 +136,9 @@ def local(
         False,
         "--update",
         help="Fast-forward clean worktrees. This is the only write this tool performs.",
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Print only repositories with findings."
     ),
 ) -> None:
     """Branches checked out locally, worktrees, dirty state."""
@@ -137,7 +169,7 @@ def local(
             stale += 1
         if update:
             updated.extend((repo, branch) for branch in fast_forward_worktrees(repo))
-        emit(render_repo(report, root))
+        _emit_repo(report, root, quiet)
 
     _emit_summary(updated, root)
     _emit_footer(stale, analysed)
@@ -158,9 +190,12 @@ def remote(
         "--branch",
         help="Case-insensitive substring of the branch name. Repeatable, or comma-separated.",
     ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q", help="Print only repositories with findings."
+    ),
 ) -> None:
     """Remote branches matching the filters."""
-    _run(ANALYSES["remote"], path, no_fetch, author, branch)
+    _run(ANALYSES["remote"], path, no_fetch, author, branch, quiet)
 
 
 @app.command()
@@ -178,9 +213,15 @@ def merged(
         "--branch",
         help="Case-insensitive substring of the branch name. Repeatable, or comma-separated.",
     ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        "-q",
+        help="Print only repositories with deletion candidates or repository warnings.",
+    ),
 ) -> None:
     """Remote branches whose changes are already in the base branch."""
-    _run(ANALYSES["merged"], path, no_fetch, author, branch)
+    _run(ANALYSES["merged"], path, no_fetch, author, branch, quiet, hide_unmerged=True)
 
 
 def build_parser() -> typer.Typer:
@@ -251,6 +292,8 @@ def _run(
     no_fetch: bool,
     author: list[str] | None,
     branch_filter: str | list[str] | None,
+    quiet: bool,
+    hide_unmerged: bool = False,
 ) -> None:
     config = Config.load()
     root = _resolve_root(path)
@@ -279,7 +322,7 @@ def _run(
         analysed += 1
         if report.is_stale:
             stale += 1
-        emit(render_repo(report, root))
+        _emit_repo(report, root, quiet, hide_unmerged)
 
     _emit_footer(stale, analysed)
 
@@ -290,9 +333,18 @@ def run_command(
     no_fetch: bool,
     author: list[str] | None = None,
     branch_filter: str | list[str] | None = None,
+    quiet: bool = False,
 ) -> None:
     """Run one named subcommand's analysis over *path*."""
-    _run(ANALYSES[command], path, no_fetch, author or [], branch_filter)
+    _run(
+        ANALYSES[command],
+        path,
+        no_fetch,
+        author or [],
+        branch_filter,
+        quiet,
+        hide_unmerged=command == "merged",
+    )
 
 
 def _emit_summary(updated: list[tuple[Path, str]], root: Path) -> None:
