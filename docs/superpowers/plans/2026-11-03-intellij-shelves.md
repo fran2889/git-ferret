@@ -39,7 +39,7 @@
 - Consumes: nothing.
 - Produces: `Status.SHELF` whose `MARKER` is `[SHELF]` and whose `EMOJI` is `🗄️`.
 
-- [ ] **Step 1: Write the failing model tests**
+- [x] **Step 1: Write the failing model tests**
 
 In `tests/test_models.py`, add `"SHELF"` to the expected set in
 `test_status_values_are_exactly_the_documented_set`, and add this assertion to
@@ -49,26 +49,26 @@ In `tests/test_models.py`, add `"SHELF"` to the expected set in
     assert Status.SHELF.MARKER == "[SHELF]"
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python -m pytest tests/test_models.py -q`
 
 Expected: FAIL because `Status.SHELF` does not exist.
 
-- [ ] **Step 3: Add the status and its glyph**
+- [x] **Step 3: Add the status and its glyph**
 
 In `git_ferret/models.py`, add `SHELF = "SHELF"` beside `STASH`, and add
 `Status.SHELF: "🗄️"` to `EMOJI_FOR` beside `Status.STASH`. The existing
 `test_every_status_has_an_emoji` and `test_no_two_statuses_share_an_emoji`
 must keep passing.
 
-- [ ] **Step 4: Run the model tests**
+- [x] **Step 4: Run the model tests**
 
 Run: `.venv/bin/python -m pytest tests/test_models.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add git_ferret/models.py tests/test_models.py
@@ -89,11 +89,12 @@ git commit -m "feat: add a shelf finding status"
   called once per worktree from `analyse_local`. It appends one `Finding` per
   non-auto-generated shelf directory.
 
-- [ ] **Step 1: Write the failing shelf tests**
+- [x] **Step 1: Write the failing shelf tests**
 
-In `tests/test_local.py`, add `import os`, `from datetime import datetime`, and
-`Finding` to the existing `git_ferret.models` import. Then add this helper and
-the tests below:
+In `tests/test_local.py`, add `import os`, `from collections.abc import Iterator`,
+`from datetime import datetime`, and `Finding` to the existing
+`git_ferret.models` import, and `import pytest`. Then add this helper and the
+tests below:
 
 ```python
 def _make_shelf(repo: Path, name: str, modified: float | None = None) -> Path:
@@ -120,6 +121,28 @@ def test_reports_a_shelf_by_name_and_mtime(tmp_path: Path):
     assert len(shelves) == 1
     assert 'IntelliJ shelf "my-shelf"' in shelves[0].detail
     assert f"modified {expected}" in shelves[0].detail
+
+
+def test_a_shelf_whose_timestamp_cannot_be_read_is_reported_as_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    shelf = _make_shelf(repo, "my-shelf")
+    real_stat = Path.stat
+
+    def unreadable_shelf(self: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        if self == shelf:
+            raise OSError("shelf statistics are unreadable")
+        return real_stat(self, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "stat", unreadable_shelf)
+    shelves = _shelf_findings(_report(repo))
+    assert len(shelves) == 1
+    assert shelves[0].detail == (
+        'IntelliJ shelf "my-shelf", modified unknown, contents not inspected'
+    )
 
 
 def test_shelf_finding_says_contents_were_not_inspected(tmp_path: Path):
@@ -158,12 +181,27 @@ def test_reports_a_shelf_in_a_linked_worktree(tmp_path: Path):
     assert shelves[0].branch == "linked-branch"
 
 
-def test_reports_one_finding_per_shelf_in_name_order(tmp_path: Path):
+def test_reports_one_finding_per_shelf_in_name_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
     _make_shelf(repo, "zebra")
     _make_shelf(repo, "alpha")
+    shelf_root = repo / ".idea" / "shelf"
+    real_iterdir = Path.iterdir
+
+    def reversed_shelf_listing(self: Path) -> Iterator[Path]:
+        entries = list(real_iterdir(self))
+        if self == shelf_root:
+            entries.reverse()
+        return iter(entries)
+
+    # A real directory listing does not promise an order, and on some
+    # filesystems it is already alphabetical. Reverse it so an implementation
+    # that forgets to sort cannot pass by accident.
+    monkeypatch.setattr(Path, "iterdir", reversed_shelf_listing)
     names = [f.detail.split('"')[1] for f in _shelf_findings(_report(repo))]
     assert names == ["alpha", "zebra"]
 
@@ -209,13 +247,13 @@ def test_reports_a_shelf_in_a_detached_linked_worktree(tmp_path: Path):
     assert shelves[0].branch == str(linked)
 ```
 
-- [ ] **Step 2: Run the shelf tests to verify they fail**
+- [x] **Step 2: Run the shelf tests to verify they fail**
 
-Run: `.venv/bin/python -m pytest tests/test_local.py -q -k "shelf"`
+Run: `.venv/bin/python -m pytest tests/test_local.py -q -k "shelf or shelves"`
 
 Expected: FAIL because no shelf finding is produced.
 
-- [ ] **Step 3: Implement the shelf scan**
+- [x] **Step 3: Implement the shelf scan**
 
 In `git_ferret/analysis/local.py`, add these constants near `NO_BASE_REASON`:
 
@@ -257,19 +295,19 @@ def _report_shelves(worktree: Path, branch: str | None, report: RepoReport) -> N
 Call `_report_shelves(path, branch_name, report)` once per worktree inside
 `analyse_local`, immediately after the existing `if dirty:` block.
 
-- [ ] **Step 4: Run the shelf tests**
+- [x] **Step 4: Run the shelf tests**
 
-Run: `.venv/bin/python -m pytest tests/test_local.py -q -k "shelf"`
+Run: `.venv/bin/python -m pytest tests/test_local.py -q -k "shelf or shelves"`
 
 Expected: PASS.
 
-- [ ] **Step 5: Run the whole local test module**
+- [x] **Step 5: Run the whole local test module**
 
 Run: `.venv/bin/python -m pytest tests/test_local.py -q`
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add git_ferret/analysis/local.py tests/test_local.py
@@ -289,7 +327,7 @@ git commit -m "feat(local): report IntelliJ shelves"
 - Consumes: the `[SHELF]` marker and finding shape from Tasks 1 and 2.
 - Produces: user-facing documentation; no code interface.
 
-- [ ] **Step 1: Update the `local` section**
+- [x] **Step 1: Update the `local` section**
 
 In `README.md`, change the line under "### `local`: what am I sitting on?" to:
 
@@ -301,18 +339,19 @@ IntelliJ shelves.
 Add this finding to the `local` example, after the `[STASH]` line:
 
 ```markdown
-- 🗄️ `api-server` [SHELF] IntelliJ shelf "refactor-storage", modified 2026-10-14 18:30, contents not inspected
+- 🗄️ `main` [SHELF] IntelliJ shelf "refactor-storage", modified 2026-10-14 18:30, contents not inspected
 ```
 
 Add this paragraph after the example block:
 
 ```markdown
 IntelliJ shelves are listed with their name and modification time, and the finding says the
-contents were not inspected. IntelliJ's auto-generated `Uncommitted_changes_before_*` shelf
+contents were not inspected. The reference is the worktree's checked-out branch, or the worktree
+path when HEAD is detached. IntelliJ's auto-generated `Uncommitted_changes_before_*` shelf
 directories are churn rather than parked work, so they are skipped.
 ```
 
-- [ ] **Step 2: Update the marker table and the feature list**
+- [x] **Step 2: Update the marker table**
 
 In the marker table, add this row after `[STASH]`:
 
@@ -320,20 +359,16 @@ In the marker table, add this row after `[STASH]`:
 | `[SHELF]` | IntelliJ shelf directories, with name and modification time |
 ```
 
-In "Additional features", add this bullet after stash reporting:
+The README has no separate feature list. The `local` section and the marker table are the
+user-facing documentation for this feature; no extra bullet is needed.
 
-```markdown
-- **IntelliJ shelf reporting** in `local`, with modification times and auto-generated shelves
-  filtered out.
-```
-
-- [ ] **Step 3: Run the full fast gate**
+- [x] **Step 3: Run the full fast gate**
 
 Run: `make PYTHON=.venv/bin/python check`
 
 Expected: format-check, lint, SPDX check, pyright, and the pytest suite all pass.
 
-- [ ] **Step 4: Commit the documentation**
+- [x] **Step 4: Commit the documentation**
 
 ```bash
 git add README.md docs/superpowers/specs/2026-11-03-intellij-shelves-design.md docs/superpowers/plans/2026-11-03-intellij-shelves.md

@@ -230,11 +230,12 @@ fetched 2026-10-16 09:41:02 · base: origin/main
 - ✓ `feature/done` [OK] last commit 2 weeks ago
 - 🔌 `api-server` [UNREACHABLE] fetch failed for origin
 - 📦 `api-server` [STASH] stash@{0}: On main: refactor storage layer
-- 🗄️ `api-server` [SHELF] IntelliJ shelf "refactor-storage", modified 2026-10-14 18:30, contents not inspected
+- 🗄️ `main` [SHELF] IntelliJ shelf "refactor-storage", modified 2026-10-14 18:30, contents not inspected
 ```
 
 IntelliJ shelves are listed with their name and modification time, and the finding says the
-contents were not inspected. IntelliJ's auto-generated `Uncommitted_changes_before_*` shelf
+contents were not inspected. The reference is the worktree's checked-out branch, or the worktree
+path when HEAD is detached. IntelliJ's auto-generated `Uncommitted_changes_before_*` shelf
 directories are churn rather than parked work, so they are skipped.
 
 Repository headings are relative to the directory you scanned, so the root you typed is not repeated
