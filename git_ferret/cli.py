@@ -27,6 +27,7 @@ from git_ferret import __version__
 from git_ferret.analysis.health import report_remote_health
 from git_ferret.analysis.local import analyse_local
 from git_ferret.analysis.remote import (
+    UNMERGED_STATUSES,
     analyse_merged_candidates,
     analyse_remote,
 )
@@ -34,7 +35,7 @@ from git_ferret.config import Config, ConfigError, resolve_identities
 from git_ferret.discovery import discover_repos, list_worktrees
 from git_ferret.gitcmd import GitError, GitUnavailable, require_git, run_git
 from git_ferret.gitops import fetch_all, resolve_base_ref
-from git_ferret.models import RepoReport, Status
+from git_ferret.models import RepoReport
 from git_ferret.report import (
     display_path,
     emit,
@@ -97,26 +98,23 @@ def _aborts_on_interrupt(func: Callable[..., None]) -> Callable[..., None]:
     return wrapper
 
 
-QUIET_HIDDEN_STATUSES = frozenset({Status.NOT_MERGED, Status.CONFLICTS, Status.UNKNOWN})
-
-
 def _emit_repo(report: RepoReport, root: Path, quiet: bool, hide_unmerged: bool = False) -> None:
     """Print one repository's section, unless quiet hides it.
 
     The filter lives here, after analysis and after the stale and analysed
     counters have been updated, so a hidden repository still counts in the
-    footer and still contributes its findings to nothing else. Rendering is
-    unchanged; quiet removes whole sections, never lines.
+    footer even though its section is gone. Without ``hide_unmerged``, quiet
+    removes whole sections and never lines.
 
     ``hide_unmerged`` is the one command-specific rule: ``merged --quiet``
-    drops branches whose verdict is not merged, but keeps repository-level
-    warnings such as ``[NO BASE]`` and ``[UNREACHABLE]``.
+    drops branches whose verdict is not merged, keeping repository-level
+    warnings such as ``[NO BASE]`` and ``[UNREACHABLE]`` visible.
     """
     if not quiet:
         emit(render_repo(report, root))
         return
     visible = (
-        [finding for finding in report.findings if finding.status not in QUIET_HIDDEN_STATUSES]
+        [finding for finding in report.findings if finding.status not in UNMERGED_STATUSES]
         if hide_unmerged
         else report.findings
     )
@@ -216,7 +214,10 @@ def merged(
         help="Case-insensitive substring of the branch name. Repeatable, or comma-separated.",
     ),
     quiet: bool = typer.Option(
-        False, "--quiet", "-q", help="Print only repositories with findings."
+        False,
+        "--quiet",
+        "-q",
+        help="Print only repositories with deletion candidates or repository warnings.",
     ),
 ) -> None:
     """Remote branches whose changes are already in the base branch."""

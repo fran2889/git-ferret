@@ -122,6 +122,44 @@ def _clone_with_merged_and_unmerged_branches(tmp_path: Path, dest: Path) -> Path
     return clone_local(src, dest)
 
 
+def _clone_with_conflicting_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `conflict` cannot merge into main."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\nb\nc\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "conflict")
+    (src / "f.txt").write_text("SIDE-A\nb\nc\n")
+    commit(src, "side a")
+    run(src, "checkout", "main")
+    (src / "f.txt").write_text("SIDE-B\nb\nc\n")
+    commit(src, "side b")
+    return clone_local(src, dest)
+
+
+def _clone_with_unknown_branch(tmp_path: Path, dest: Path) -> Path:
+    """A clone whose remote branch `orphan` shares no history with main."""
+    src = make_repo(tmp_path / "fixtures" / f"{dest.name}-src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "--orphan", "orphan")
+    (src / "f.txt").write_text("zzz\n")
+    run(src, "add", "-A")
+    commit(src, "orphan")
+    run(src, "checkout", "main")
+    return clone_local(src, dest)
+
+
+def _clone_with_unsafe_merged_branch(tmp_path: Path, dest: Path) -> Path:
+    """A merged remote branch shadowed by a local branch with unpushed work."""
+    clone = _clone_with_merged_branch(tmp_path, dest)
+    run(clone, "branch", "--no-track", "done", "origin/done")
+    run(clone, "checkout", "done")
+    (clone / "local-only.txt").write_text("mine\n")
+    commit(clone, "local only")
+    run(clone, "checkout", "main")
+    return clone
+
+
 def _clone_without_base(tmp_path: Path, dest: Path) -> Path:
     """A clone whose only branch is `trunk`: no main or master to compare."""
     src = tmp_path / "fixtures" / f"{dest.name}-src"
@@ -420,6 +458,28 @@ def test_merged_quiet_hides_a_repository_with_only_unmerged_branches(tmp_path: P
     res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
     assert res.exit_code == 0, res.output
     assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_hides_conflicting_branches(tmp_path: Path):
+    clone = _clone_with_conflicting_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_hides_unknown_branches(tmp_path: Path):
+    clone = _clone_with_unknown_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert res.stdout == "# git-ferret\n\n"
+
+
+def test_merged_quiet_keeps_merged_but_unsafe_branches(tmp_path: Path):
+    clone = _clone_with_unsafe_merged_branch(tmp_path, tmp_path / "clean")
+    res = runner.invoke(build_parser(), ["merged", str(clone), "--quiet"])
+    assert res.exit_code == 0, res.output
+    assert "## .\n" in res.stdout
+    assert "`origin/done` [UNSAFE TO DELETE]" in res.stdout
 
 
 def test_merged_quiet_drops_unmerged_lines_from_a_visible_repository(tmp_path: Path):
