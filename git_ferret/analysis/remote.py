@@ -38,6 +38,11 @@ _STATUS_FOR_VERDICT = {
     MergeVerdict.UNKNOWN: Status.UNKNOWN,
 }
 
+# The statuses a non-merged verdict maps to. Quiet filtering reads this rather
+# than repeating the statuses, so adding a verdict cannot leave it visible in a
+# `merged --quiet` section by omission.
+UNMERGED_STATUSES: frozenset[Status] = frozenset(_STATUS_FOR_VERDICT.values())
+
 
 def local_branch_unpushed_map(repo: Path) -> dict[str, bool]:
     """``{branch: holds unpushed work}`` for every local branch, in one pass.
