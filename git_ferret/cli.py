@@ -149,10 +149,14 @@ def remote(
     path: Path = typer.Argument(Path(".")),
     no_fetch: bool = typer.Option(False, "--no-fetch"),
     author: list[str] = typer.Option(
-        [], "--author", help="Substring of 'Name <email>'. Repeatable, or comma-separated."
+        [],
+        "--author",
+        help="Case-insensitive substring of 'Name <email>'. Repeatable, or comma-separated.",
     ),
     branch: list[str] = typer.Option(
-        [], "--branch", help="Substring of the branch name. Repeatable, or comma-separated."
+        [],
+        "--branch",
+        help="Case-insensitive substring of the branch name. Repeatable, or comma-separated.",
     ),
 ) -> None:
     """Remote branches matching the filters."""
@@ -165,10 +169,14 @@ def merged(
     path: Path = typer.Argument(Path(".")),
     no_fetch: bool = typer.Option(False, "--no-fetch"),
     author: list[str] = typer.Option(
-        [], "--author", help="Substring of 'Name <email>'. Repeatable, or comma-separated."
+        [],
+        "--author",
+        help="Case-insensitive substring of 'Name <email>'. Repeatable, or comma-separated.",
     ),
     branch: list[str] = typer.Option(
-        [], "--branch", help="Substring of the branch name. Repeatable, or comma-separated."
+        [],
+        "--branch",
+        help="Case-insensitive substring of the branch name. Repeatable, or comma-separated.",
     ),
 ) -> None:
     """Remote branches whose changes are already in the base branch."""
