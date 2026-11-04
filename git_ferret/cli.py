@@ -387,7 +387,8 @@ def fast_forward_branches(repo: Path) -> list[str]:
 
     The worktree pass runs first and owns every checked-out branch. The ref-only
     pass then moves branches no worktree has checked out. Only branches that
-    moved are returned; every refusal is already a finding in the report.
+    moved are returned. The report already covers the branches it has a finding
+    for; a write refused at the CAS boundary is silent.
     """
     worktrees = list_worktrees(repo)
     updated = _fast_forward_worktrees(worktrees)
