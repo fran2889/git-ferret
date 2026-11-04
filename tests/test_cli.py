@@ -16,6 +16,7 @@ developer's terminal and fails in CI over a difference in styling that has
 nothing to do with what is documented.
 """
 
+import pytest
 from click import unstyle
 from typer.testing import CliRunner
 
@@ -64,3 +65,16 @@ def test_update_is_not_on_remote():
 
 def test_local_help_documents_it_does_not_write_by_default():
     assert "--update" in _help("local")
+
+
+def test_local_help_lists_quiet_flag():
+    help_text = _help("local")
+    assert "--quiet" in help_text
+    assert "-q" in help_text
+
+
+@pytest.mark.parametrize("command", ["remote", "merged"])
+def test_remote_and_merged_help_list_quiet(command: str):
+    help_text = _help(command)
+    assert "--quiet" in help_text
+    assert "-q" in help_text
