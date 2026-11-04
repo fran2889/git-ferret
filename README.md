@@ -220,7 +220,8 @@ the full report or the error and exit code.
 
 ### `local`: what am I sitting on?
 
-Branches checked out locally, plus worktree state: uncommitted changes, detached HEADs, stashes.
+Branches checked out locally, plus worktree state: uncommitted changes, detached HEADs, stashes,
+IntelliJ shelves.
 
 ```console
 $ git-ferret local ~/src
@@ -236,7 +237,13 @@ fetched 2026-10-16 09:41:02 · base: origin/main
 - ✓ `feature/done` [OK] last commit 2 weeks ago
 - 🔌 `api-server` [UNREACHABLE] fetch failed for origin
 - 📦 `api-server` [STASH] stash@{0}: On main: refactor storage layer
+- 🗄️ `main` [SHELF] IntelliJ shelf "refactor-storage", modified 2026-10-14 18:30, contents not inspected
 ```
+
+IntelliJ shelves are listed with their name and modification time, and the finding says the
+contents were not inspected. The reference is the worktree's checked-out branch, or the worktree
+path when HEAD is detached. IntelliJ's auto-generated `Uncommitted_changes_before_*` shelf
+directories are churn rather than parked work, so they are skipped.
 
 Repository headings are relative to the directory you scanned, so the root you typed is not repeated
 above every one of them. A repository that *is* the root you scanned is named `.`. The line under a
@@ -261,7 +268,8 @@ $ git-ferret merged ~/src --branch "ABC-123,DEF-456"
 ```
 
 A branch matches any pattern, and the author filter still applies. Blank patterns are ignored;
-if all patterns are blank, no branch-name filter is applied.
+if all patterns are blank, no branch-name filter is applied. `--author` and `--branch` match
+case-insensitively. Whitelist patterns are configured separately and remain case-sensitive.
 
 ### `merged`: which remote branches are already in main?
 
@@ -294,6 +302,7 @@ Every command accepts a directory argument, and all of them default to the curre
 |---|---|---|
 | `PATH` | `local`, `remote`, `merged` | Directory to scan recursively. Defaults to `.`. |
 | `--no-fetch` | `local`, `remote`, `merged` | Skip `git fetch --all --prune` and read the existing refs. |
+| `--quiet`, `-q` | `local`, `remote`, `merged` | Hide clean repositories; `merged` also hides unmerged branches. |
 | `--update` | `local` | Fast-forward clean worktrees and unchecked-out branches behind their upstream. The only write path. |
 | `--author SUBSTR` | `remote`, `merged` | Substring of `Name <email>`. Repeatable, or comma-separated. |
 | `--branch SUBSTR` | `remote`, `merged` | Substring of the branch name. Repeatable, or comma-separated. |
@@ -437,6 +446,7 @@ UTF-8 too, so redirecting it is lossless rather than limited to the console's co
 | `[DIRTY]` | Uncommitted changes in this worktree |
 | `[DETACHED]` | Worktree HEAD is detached |
 | `[STASH]` | Stashed work, with its message |
+| `[SHELF]` | IntelliJ shelf directories, with name and modification time |
 | `[UNREACHABLE]` | No remote configured, or the fetch failed |
 | `[SAFE TO DELETE]` | Merged into the base branch, nothing local depends on it: a deletion candidate |
 | `[UNSAFE TO DELETE]` | Merged, but a same-named local branch has unpushed work: keep it |
@@ -449,6 +459,12 @@ locally, and reporting that as a conflict would invent a problem you do not have
 
 Findings alone never change the exit code, so a weekly cron job can alert on *new* findings by
 diffing two reports rather than on exit status.
+
+`--quiet` suppresses the section for any repository with no visible findings. For `merged` it also
+hides `[NOT MERGED]`, `[CONFLICTS]`, and `[UNKNOWN]` branches, so only deletion candidates and
+merged-but-unsafe branches remain. `[NO BASE]` and `[UNREACHABLE]` always print. The header, the
+stale warning, and a non-empty `## fast-forwarded` block still print, so a quiet run is still a
+complete report of what happened.
 
 | Exit code | Meaning |
 |---|---|

@@ -31,6 +31,7 @@ def test_status_values_are_exactly_the_documented_set():
         "DIRTY",
         "DETACHED",
         "STASH",
+        "SHELF",
         "UNREACHABLE",
         "NO_BASE",
         "SAFE_TO_DELETE",
@@ -56,6 +57,7 @@ def test_status_marker_texts():
     assert Status.OK.MARKER == "[OK]"
     assert Status.NOT_PUSHED.MARKER == "[NOT PUSHED]"
     assert Status.UPSTREAM_DELETED.MARKER == "[UPSTREAM DELETED]"
+    assert Status.SHELF.MARKER == "[SHELF]"
     assert Status.NO_BASE.MARKER == "[NO BASE]"
 
 
