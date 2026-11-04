@@ -237,8 +237,8 @@ def test_an_unreadable_worktree_is_not_ref_updated(tmp_path: Path):
     assert run(clone, "rev-parse", "feat").stdout.strip() == before
 
 
-def test_a_rebase_in_progress_skips_the_ref_only_pass(tmp_path: Path):
-    """A rebase detaches HEAD, so its branch would otherwise look unchecked-out."""
+def _paused_rebase_clone(tmp_path: Path, *rebase_args: str) -> Path:
+    """A clone whose linked worktree is stopped in a rebase of ``feat``."""
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
     commit(src, "base")
@@ -258,11 +258,48 @@ def test_a_rebase_in_progress_skips_the_ref_only_pass(tmp_path: Path):
     run(src, "checkout", "main")
     run(clone, "fetch", "--all", "--prune")
     # A conflicting rebase leaves HEAD detached and rebase state on disk.
-    rebase = run_git(linked, "rebase", "origin/main")
+    rebase = run_git(linked, "rebase", *rebase_args, "origin/main")
     assert rebase.returncode != 0
     # Keep the checked-out main worktree from moving through the worktree pass,
     # so the assertion observes the ref-only pass alone.
     (clone / "wip.txt").write_text("wip\n")
+    return clone
+
+
+def test_a_rebase_in_progress_skips_the_ref_only_pass(tmp_path: Path):
+    """A rebase detaches HEAD, so its branch would otherwise look unchecked-out."""
+    clone = _paused_rebase_clone(tmp_path)
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
+
+
+def test_an_apply_rebase_in_progress_skips_the_ref_only_pass(tmp_path: Path):
+    clone = _paused_rebase_clone(tmp_path, "--apply")
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
+
+
+def test_a_bisect_in_progress_skips_the_ref_only_pass(tmp_path: Path):
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "feat")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "branch", "--track", "feat", "origin/feat")
+    run(src, "checkout", "feat")
+    (src / "f.txt").write_text("a\none\n")
+    commit(src, "one")
+    (src / "f.txt").write_text("a\ntwo\n")
+    commit(src, "two")
+    run(src, "checkout", "main")
+    run(clone, "fetch", "--all", "--prune")
+    run(clone, "bisect", "start")
+    run(clone, "bisect", "bad", "origin/feat")
+    run(clone, "bisect", "good", "main")
     before = run(clone, "rev-parse", "feat").stdout.strip()
 
     assert fast_forward_branches(clone) == []
