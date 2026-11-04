@@ -4,8 +4,11 @@
 """Tests for local branch and worktree analysis."""
 
 import os
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 from git_ferret.analysis.local import analyse_local
 from git_ferret.config import Config
@@ -267,6 +270,28 @@ def test_reports_a_shelf_by_name_and_mtime(tmp_path: Path):
     assert f"modified {expected}" in shelves[0].detail
 
 
+def test_a_shelf_whose_timestamp_cannot_be_read_is_reported_as_unknown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    repo = make_repo(tmp_path / "r")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    shelf = _make_shelf(repo, "my-shelf")
+    real_stat = Path.stat
+
+    def unreadable_shelf(self: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+        if self == shelf:
+            raise OSError("shelf statistics are unreadable")
+        return real_stat(self, follow_symlinks=follow_symlinks)
+
+    monkeypatch.setattr(Path, "stat", unreadable_shelf)
+    shelves = _shelf_findings(_report(repo))
+    assert len(shelves) == 1
+    assert shelves[0].detail == (
+        'IntelliJ shelf "my-shelf", modified unknown, contents not inspected'
+    )
+
+
 def test_shelf_finding_says_contents_were_not_inspected(tmp_path: Path):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
@@ -303,12 +328,27 @@ def test_reports_a_shelf_in_a_linked_worktree(tmp_path: Path):
     assert shelves[0].branch == "linked-branch"
 
 
-def test_reports_one_finding_per_shelf_in_name_order(tmp_path: Path):
+def test_reports_one_finding_per_shelf_in_name_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     repo = make_repo(tmp_path / "r")
     (repo / "f.txt").write_text("a\n")
     commit(repo, "base")
     _make_shelf(repo, "zebra")
     _make_shelf(repo, "alpha")
+    shelf_root = repo / ".idea" / "shelf"
+    real_iterdir = Path.iterdir
+
+    def reversed_shelf_listing(self: Path) -> Iterator[Path]:
+        entries = list(real_iterdir(self))
+        if self == shelf_root:
+            entries.reverse()
+        return iter(entries)
+
+    # A real directory listing does not promise an order, and on some
+    # filesystems it is already alphabetical. Reverse it so an implementation
+    # that forgets to sort cannot pass by accident.
+    monkeypatch.setattr(Path, "iterdir", reversed_shelf_listing)
     names = [f.detail.split('"')[1] for f in _shelf_findings(_report(repo))]
     assert names == ["alpha", "zebra"]
 
