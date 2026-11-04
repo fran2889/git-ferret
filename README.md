@@ -254,7 +254,8 @@ $ git-ferret merged ~/src --branch "ABC-123,DEF-456"
 ```
 
 A branch matches any pattern, and the author filter still applies. Blank patterns are ignored;
-if all patterns are blank, no branch-name filter is applied.
+if all patterns are blank, no branch-name filter is applied. `--author` and `--branch` match
+case-insensitively. Whitelist patterns are configured separately and remain case-sensitive.
 
 ### `merged`: which remote branches are already in main?
 

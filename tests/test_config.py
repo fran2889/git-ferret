@@ -110,8 +110,9 @@ def test_identity_matches_any_commit_any_identity():
     assert identity_matches(commits, ["nobody@nowhere"]) is False
 
 
-def test_identity_matching_is_case_sensitive():
-    assert identity_matches(["Dev <dev@example.com>"], ["DEV"]) is False
+def test_identity_matching_is_case_insensitive():
+    assert identity_matches(["Dev <dev@example.com>"], ["DEV"]) is True
+    assert identity_matches(["Dev <dev@example.com>"], ["DEV@EXAMPLE.COM"]) is True
 
 
 def test_load_reads_list_form(tmp_path: Path):
