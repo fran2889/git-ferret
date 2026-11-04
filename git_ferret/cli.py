@@ -391,9 +391,34 @@ def fast_forward_branches(repo: Path) -> list[str]:
     """
     worktrees = list_worktrees(repo)
     updated = _fast_forward_worktrees(worktrees)
+    if _has_in_progress_operation(worktrees):
+        return updated
     checked_out = {branch for _, branch in worktrees if branch is not None}
     updated.extend(_fast_forward_refs(repo, checked_out))
     return updated
+
+
+def _has_in_progress_operation(worktrees: list[tuple[Path, str | None]]) -> bool:
+    """Whether a worktree is mid-rebase, mid-am, or mid-bisect.
+
+    All three detach HEAD, so the branch they are working on is absent from
+    ``list_worktrees`` and would look unchecked-out to the ref-only pass.
+    Moving that branch would fight the operation, so the ref-only pass is
+    skipped for the repository. A worktree whose git dir cannot be read fails
+    closed, because this gates a write.
+    """
+    for worktree, _ in worktrees:
+        git_dir = run_git(worktree, "rev-parse", "--absolute-git-dir")
+        if git_dir.returncode != 0 or not git_dir.stdout.strip():
+            return True
+        state = Path(git_dir.stdout.strip())
+        if (
+            (state / "rebase-merge").exists()
+            or (state / "rebase-apply").exists()
+            or (state / "BISECT_LOG").exists()
+        ):
+            return True
+    return False
 
 
 def _fast_forward_worktrees(worktrees: list[tuple[Path, str | None]]) -> list[str]:

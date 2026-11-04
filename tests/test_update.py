@@ -20,6 +20,7 @@ from git_ferret.cli import (
     build_parser,
     fast_forward_branches,
 )
+from git_ferret.gitcmd import run_git
 from git_ferret.gitops import list_branches
 from git_ferret.models import BranchInfo
 from tests.helpers import clone_local, commit, make_repo, run
@@ -230,6 +231,38 @@ def test_an_unreadable_worktree_is_not_ref_updated(tmp_path: Path):
     linked = tmp_path / "linked"
     run(clone, "worktree", "add", str(linked), "feat")
     shutil.rmtree(linked)
+    before = run(clone, "rev-parse", "feat").stdout.strip()
+
+    assert fast_forward_branches(clone) == []
+    assert run(clone, "rev-parse", "feat").stdout.strip() == before
+
+
+def test_a_rebase_in_progress_skips_the_ref_only_pass(tmp_path: Path):
+    """A rebase detaches HEAD, so its branch would otherwise look unchecked-out."""
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "checkout", "-b", "feat")
+    (src / "local.txt").write_text("local\n")
+    commit(src, "local work")
+    run(src, "checkout", "main")
+    (src / "local.txt").write_text("main side\n")
+    commit(src, "main work")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "branch", "--track", "feat", "origin/feat")
+    linked = tmp_path / "linked"
+    run(clone, "worktree", "add", str(linked), "feat")
+    run(src, "checkout", "feat")
+    (src / "up.txt").write_text("up\n")
+    commit(src, "upstream work")
+    run(src, "checkout", "main")
+    run(clone, "fetch", "--all", "--prune")
+    # A conflicting rebase leaves HEAD detached and rebase state on disk.
+    rebase = run_git(linked, "rebase", "origin/main")
+    assert rebase.returncode != 0
+    # Keep the checked-out main worktree from moving through the worktree pass,
+    # so the assertion observes the ref-only pass alone.
+    (clone / "wip.txt").write_text("wip\n")
     before = run(clone, "rev-parse", "feat").stdout.strip()
 
     assert fast_forward_branches(clone) == []

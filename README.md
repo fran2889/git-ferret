@@ -73,6 +73,9 @@ succeeds if the branch still points where it did when it was read, so a branch t
 meantime is refused rather than forced. An ahead or diverged branch is left alone and reported as
 before.
 
+A repository with a rebase, `git am`, or bisect in progress is skipped by the ref-only pass: those
+operations detach HEAD, so the branch they are working on would otherwise look unchecked-out.
+
 ## Install
 
 Needs Python 3.14 or newer, and `git` 2.38 or newer on your `PATH`. The git floor is

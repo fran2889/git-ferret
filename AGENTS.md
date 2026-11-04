@@ -9,7 +9,8 @@ Instructions for AI agents working in this repository. Read this before changing
 git-ferret is a read-only reporting tool for auditing many local git repositories at once. It finds
 branches that are merged, unpushed, diverged, or safe to delete, and it never deletes anything
 itself. The only write path is an explicit `local --update`, which fast-forwards a clean worktree or
-a clean unchecked-out branch behind its upstream.
+a clean unchecked-out branch behind its upstream, in a repository with no rebase, am, or bisect in
+progress.
 
 Stack: Python 3.14, typer and rich for the CLI, pytest for tests, ruff for formatting and linting,
 pyright in strict mode for types, and uv for the locked environment. There is no Node.js toolchain
@@ -47,7 +48,8 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
 ## Hard constraints
 
 - Read-only by default. `local --update` is the only write path, and only for a clean worktree or
-  a clean unchecked-out branch behind its upstream. Do not add another write.
+  a clean unchecked-out branch behind its upstream, in a repository with no rebase, am, or bisect
+  in progress. Do not add another write.
 - Tests use real git repositories, never a mocked git. Fixtures are built with `tests.helpers`.
 - The report is markdown with no ANSI escapes and no tables in the file. Terminal styling happens
   only in `report.emit` when stdout is a TTY.
