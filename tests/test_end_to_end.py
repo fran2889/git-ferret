@@ -4,6 +4,7 @@
 """End-to-end coverage: all three subcommands over a realistic repository tree."""
 
 import subprocess
+from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
@@ -320,7 +321,7 @@ def test_each_repository_is_fetched_just_before_its_section(
     real_fetch = cli_module._fetch_report  # pyright: ignore[reportPrivateUsage]
     real_emit = cli_module.emit
 
-    def recording_fetch(repo: Path, no_fetch: bool) -> tuple[bool, bool]:
+    def recording_fetch(repo: Path, no_fetch: bool) -> tuple[bool, datetime | None] | None:
         events.append(("fetch", repo.name))
         return real_fetch(repo, no_fetch)
 

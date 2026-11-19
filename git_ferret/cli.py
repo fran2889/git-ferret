@@ -18,6 +18,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 
 import click
@@ -268,22 +269,21 @@ def _warn(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def _fetch_report(repo: Path, no_fetch: bool) -> tuple[bool, bool]:
-    """Fetch *repo* unless asked not to; return ``(attempted, failed)``.
-
-    The one place a fetch happens. Its outcome is recorded on the report the
-    caller is about to build, so the analyses stay free of the network and the
-    stale warning and the ``[UNREACHABLE]`` finding read from the same source.
-    """
-    if no_fetch:
-        return False, False
-    ok, _when = fetch_all(repo)
-    return True, not ok
+def _fetch_report(repo: Path, no_fetch: bool) -> tuple[bool, datetime | None] | None:
+    """Return the fetch result for this run, or None when fetching was skipped."""
+    return None if no_fetch else fetch_all(repo)
 
 
-def _stamp_fetch(report: RepoReport, fetch: tuple[bool, bool]) -> None:
-    """Record the run's fetch outcome on *report*, for the heading and warning."""
-    report.fetch_attempted, report.fetch_failed = fetch
+def _stamp_fetch(report: RepoReport, fetch: tuple[bool, datetime | None] | None) -> None:
+    """Combine this run's fetch outcome with the timestamps found by the analysis."""
+    report.fetch_attempted = fetch is not None
+    if fetch is not None:
+        ok, when = fetch
+        report.fetch_failed = not ok
+        if when is not None and (
+            report.fetched_at is None or when.timestamp() > report.fetched_at.timestamp()
+        ):
+            report.fetched_at = when
 
 
 def _run(

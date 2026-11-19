@@ -22,6 +22,31 @@ from git_ferret.models import BranchInfo
 BASE_CANDIDATES = ("origin/main", "origin/master", "main", "master")
 
 
+def _has_fetch_target(repo: Path) -> bool:
+    remotes = run_git(repo, "remote", check=True).stdout.splitlines()
+    if not remotes:
+        return False
+    # Git reads these two names into the same setting; the last value wins.
+    args = [
+        "config",
+        "--null",
+        "--type=bool",
+        "--get-regexp",
+        r"^remote\..*\.(skipfetchall|skipdefaultupdate)$",
+    ]
+    settings = run_git(repo, *args)
+    if settings.returncode == 1:  # No matching settings: all remotes participate.
+        return True
+    if settings.returncode:
+        raise GitError(args, settings.returncode, settings.stderr)
+    skipped: dict[str, bool] = {}
+    for entry in settings.stdout.rstrip("\0").split("\0"):
+        key, value = entry.rsplit("\n", 1)
+        name = key.removeprefix("remote.").rsplit(".", 1)[0]
+        skipped[name] = value == "true"
+    return any(not skipped.get(name, False) for name in remotes)
+
+
 def fetch_all(repo: Path) -> tuple[bool, datetime | None]:
     """``git fetch --all --prune``, returning a failed fetch rather than raising.
 
@@ -36,15 +61,16 @@ def fetch_all(repo: Path) -> tuple[bool, datetime | None]:
     to the run boundary (:func:`git_ferret.gitcmd.require_git`).
     """
     try:
+        # Without a fetch target, Git can truncate FETCH_HEAD while fetching nothing.
+        if not _has_fetch_target(repo):
+            return True, None
         proc = run_git(repo, "fetch", "--all", "--prune")
     except GitError:
-        # check=False only raises for a timeout; a non-zero exit is handled
-        # below, and a git that cannot run at all is GitUnavailable and must
-        # reach the boundary.
+        # A missing git raises GitUnavailable and must reach the run boundary.
         return False, None
     if proc.returncode != 0:
         return False, None
-    return True, fetch_head_mtime(repo)
+    return True, _fetch_head_time(_git_dir(repo), fetched=True)
 
 
 def _git_dir(repo: Path) -> Path:
@@ -52,16 +78,27 @@ def _git_dir(repo: Path) -> Path:
     return git_dir if git_dir.is_absolute() else repo / git_dir
 
 
-def fetch_head_mtime(repo: Path) -> datetime | None:
-    """Modification time of ``.git/FETCH_HEAD``, or ``None`` if it is absent.
-
-    Only a cross-run timestamp can support a meaningful staleness warning;
-    "time since this run" would render as zero on every heading.
-    """
-    fetch_head = _git_dir(repo) / "FETCH_HEAD"
-    if not fetch_head.exists():
+def _fetch_head_time(git_dir: Path, *, fetched: bool = False) -> datetime | None:
+    try:
+        record = (git_dir / "FETCH_HEAD").stat()
+    except OSError:
         return None
-    return datetime.fromtimestamp(fetch_head.stat().st_mtime)
+    # A successful fetch from an empty remote also leaves an empty file. Only
+    # the caller that just fetched can distinguish it from a no-op.
+    if not record.st_size and not fetched:
+        return None
+    return datetime.fromtimestamp(record.st_mtime)
+
+
+def fetch_head_mtime(repo: Path) -> datetime | None:
+    """Modification time of a recorded fetch, or None without a fetch entry."""
+    return _fetch_head_time(_git_dir(repo))
+
+
+def _has_packed_remote_refs(packed: Path) -> bool:
+    # Packing only local branches and tags is not evidence of a fetch.
+    with packed.open("rb") as refs:
+        return any(line.partition(b" ")[2].startswith(b"refs/remotes/") for line in refs)
 
 
 def refs_updated_at(repo: Path) -> datetime | None:
@@ -75,9 +112,11 @@ def refs_updated_at(repo: Path) -> datetime | None:
     ``packed-refs`` counts too, since ``git gc`` moves loose refs into it.
     """
     git_dir = _git_dir(repo)
-    newest: float | None = None
+    recorded = _fetch_head_time(git_dir)
+    newest = recorded.timestamp() if recorded is not None else None
 
-    candidates = [git_dir / "FETCH_HEAD", git_dir / "packed-refs"]
+    packed = git_dir / "packed-refs"
+    candidates = [packed]
     remotes = git_dir / "refs" / "remotes"
     if remotes.is_dir():
         candidates.extend(p for p in remotes.rglob("*") if p.is_file())
@@ -85,10 +124,13 @@ def refs_updated_at(repo: Path) -> datetime | None:
     for path in candidates:
         try:
             mtime = path.stat().st_mtime
+            if newest is not None and mtime <= newest:
+                continue
+            if path == packed and not _has_packed_remote_refs(packed):
+                continue
         except OSError:
             continue
-        if newest is None or mtime > newest:
-            newest = mtime
+        newest = mtime
     return datetime.fromtimestamp(newest) if newest is not None else None
 
 

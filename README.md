@@ -357,6 +357,9 @@ every repository carries the time of its last successful fetch:
 fetched 2026-10-16 09:41:02 · base: origin/main
 ```
 
+A local-only repository shows `never fetched` if it has no fetch record or remote-tracking refs.
+If you remove a remote after fetching, later scans still show the recorded fetch time.
+
 When any repository was read without a successful fetch this run, a warning appears once at the end
 of the report. It is a footer rather than a header because repositories are fetched one at a time as
 their analysis starts, so the count is not known until the last one has been read. A repository with
