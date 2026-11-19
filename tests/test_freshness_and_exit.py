@@ -72,6 +72,84 @@ def test_refs_updated_at_none_for_a_repo_with_no_refs(tmp_path: Path):
     assert refs_updated_at(repo) is None
 
 
+def test_local_only_packed_branches_and_empty_fetch_head_are_not_a_fetch(tmp_path: Path):
+    repo = make_repo(tmp_path / "solo")
+    (repo / "f.txt").write_text("a\n")
+    commit(repo, "base")
+    run(repo, "pack-refs", "--all")
+    # Some git versions create this file even when there is no remote to fetch.
+    (repo / ".git" / "FETCH_HEAD").touch()
+
+    result = _cli("local", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert "never fetched · base: main" in result.stdout
+    assert "[UNREACHABLE] no remote configured" in result.stdout
+    assert "stale local state" not in result.stdout
+    assert fetch_head_mtime(repo) is None
+
+
+def _clone_bare_origin(tmp_path: Path) -> Path:
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    origin = tmp_path / "origin.git"
+    run(tmp_path, "clone", "--bare", str(src), str(origin))
+    return clone_local(origin, tmp_path / "clone")
+
+
+def test_empty_fetch_head_falls_back_to_packed_remote_refs(tmp_path: Path):
+    clone = _clone_bare_origin(tmp_path)
+    run(clone, "symbolic-ref", "-d", "refs/remotes/origin/HEAD")
+    run(clone, "pack-refs", "--all")
+    packed = clone / ".git" / "packed-refs"
+    os.utime(packed, (1609459200, 1609459200))
+    (clone / ".git" / "FETCH_HEAD").touch()
+
+    stamp = refs_updated_at(clone)
+
+    assert stamp is not None and stamp.timestamp() == packed.stat().st_mtime
+
+
+@pytest.mark.parametrize("skip_setting", [None, "skipFetchAll", "skipDefaultUpdate"])
+def test_local_scan_preserves_fetch_without_an_eligible_remote(
+    tmp_path: Path, skip_setting: str | None
+):
+    clone = _clone_bare_origin(tmp_path)
+    run(clone, "fetch")
+    if skip_setting is None:
+        run(clone, "remote", "remove", "origin")
+    else:
+        run(clone, "config", f"remote.origin.{skip_setting}", "true")
+    record = clone / ".git" / "FETCH_HEAD"
+    # Make the fetch record distinguishable from a clone's older tracking refs.
+    for ref in (clone / ".git" / "refs" / "remotes").rglob("*"):
+        if ref.is_file():
+            os.utime(ref, (1609459000, 1609459000))
+    os.utime(clone / ".git" / "packed-refs", (1609459000, 1609459000))
+    os.utime(record, (1609459200, 1609459200))
+    previous = fetch_head_mtime(clone)
+    assert previous is not None
+
+    result = _cli("local", str(clone))
+
+    assert result.returncode == 0, result.stderr
+    assert f"fetched {previous:%Y-%m-%d %H:%M:%S}" in result.stdout
+    assert fetch_head_mtime(clone) == previous
+
+
+def test_successful_fetch_from_an_empty_remote_is_fresh(tmp_path: Path):
+    repo = make_repo(tmp_path / "repo")
+    run(repo, "init", "--bare", str(tmp_path / "empty.git"))
+    run(repo, "remote", "add", "origin", (tmp_path / "empty.git").as_uri())
+
+    result = _cli("local", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert "\nfetched " in result.stdout
+    assert "stale local state" not in result.stdout
+
+
 def test_fetched_repo_uses_fetch_head(tmp_path: Path):
     src = make_repo(tmp_path / "src")
     (src / "f.txt").write_text("a\n")
