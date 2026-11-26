@@ -35,13 +35,19 @@ system interpreter and will not find ruff or pyright; run `uv run --no-sync make
 | `make build` | Build the sdist and wheel, then run `twine check` |
 | `make audit` | Scan dependencies with `pip-audit` |
 | `make check` | format-check, lint, check-spdx, typecheck, and test |
-| `make ci` | Everything CI runs, including coverage, build, and audit |
+| `make workflow-lint` | Lint the workflow files with actionlint |
+| `make workflow-security` | Audit the workflows with zizmor, offline |
+| `make doc-links` | Check documentation links with lychee |
+| `make ci` | The CI checks that can run locally |
 | `make help` | List the targets |
 
-`make check` is the fast gate and is what a pull request must pass; `make ci` is the full gate and
-adds coverage, build, and audit. Run `make check` before claiming a change is complete, and
-`make ci` when you touched dependencies, packaging, or code whose coverage matters. The pre-push
-hook runs `make typecheck test`, and the pre-commit hook formats and lints staged Python files.
+`make check` is the fast gate and is what a pull request must pass; `make ci` is the full local
+gate and adds coverage, build, audit, workflow linting and security, and documentation links. Run
+`make check` before claiming a change is complete, and `make ci` when you touched dependencies,
+packaging, workflows, documentation, or code whose coverage matters. The workflow tools are
+installed separately: actionlint 1.7.12, zizmor 1.33 or newer, and lychee 0.24 or newer. The
+nightly macOS and Windows runs and the GitHub dependency review are CI-only. The pre-push hook runs
+`make typecheck test`, and the pre-commit hook formats and lints staged Python files.
 
 ## Hard constraints
 
@@ -122,7 +128,7 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
 - `tests/`: the suite plus `tests/helpers.py`, the real-repository fixture builders.
 - `scripts/`: `check_commit_msg.py` and `check_spdx.py`.
 - `.githooks/`: `commit-msg`, `pre-commit`, and `pre-push`, which chain to any global hooks.
-- `.github/`: workflows, the composite setup action, issue and pull request templates, and
-  Dependabot configuration.
+- `.github/`: workflows, the composite setup action, the zizmor config, issue and pull request
+  templates, and Dependabot configuration.
 - `docs/superpowers/specs/`: design notes. They record decisions at the time; do not rewrite them
   to match later code.

@@ -175,13 +175,16 @@ Changes landed after this comparison:
   a run on `main`.
 - The distribution upload and the custom coverage summary script were removed. Coverage is
   reported by pytest-cov in the job log and by the uploaded `coverage.xml` and `htmlcov/` artifact.
-- Both repositories now run zizmor over their workflows. git-ferret also stopped persisting
-  checkout credentials and now checks the pull request author rather than `github.actor`.
-- Still open in git-ferret: a nightly run against a newer git or Python, and PR-title validation.
+- Both repositories now run zizmor over their workflows, stop persisting checkout credentials, and
+  check the pull request author rather than `github.actor`. Flix-monkey also restricts auto-merge
+  to npm patches and uses a composite Node setup action.
 - Release publishing was then simplified to run only in the run that creates the release, from the
   triggering commit rather than a second tag checkout. A failed build is repaired by hand rather
   than by re-running. That removes the retry advantage described above.
-- flix-monkey is unchanged.
+- Remaining from the comparison: macOS and Windows test runs and deduplicating the test suite in
+  flix-monkey, PR title validation in both, a scheduled newest-toolchain run in both, and artifact
+  signing and pinned runners in both. The retryability, coverage-summary, and dist-upload
+  recommendations above no longer apply.
 
 The comparison above stays as the snapshot at the commits named at the top.
 

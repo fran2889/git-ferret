@@ -2,8 +2,9 @@
 How to use this template
 
 - Automated checks are enforced by CI: formatting, lint, the SPDX header check,
-  type-check, the test suite with coverage, a build, and a dependency audit.
-  Run `make check` locally for faster feedback.
+  type-check, workflow linting and security scanning, documentation links, the
+  test suite with coverage, a build, and a dependency audit. Run `make check`
+  locally for faster feedback; `make ci` runs the local equivalents.
 - Tick the manual box only after performing the check. If someone else did, say
   who.
 - Delete a heading that does not apply rather than leaving it empty.
