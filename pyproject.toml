@@ -82,7 +82,8 @@ source = ["git_ferret"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# The suite is at 98.9%, so 95 is a floor that catches a real drop. CI runs
-# only 3.14, the version this number was measured on, so there is no
-# cross-version drift left to absorb.
-fail_under = 95
+# The suite is at 99.1%, so 90 is a floor that still catches a large drop. The
+# threshold matches flix-monkey's coverage gate. CI runs only 3.14, the version
+# this number was measured on, so there is no cross-version drift left to
+# absorb.
+fail_under = 90

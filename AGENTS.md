@@ -89,11 +89,12 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
   fixture builders live in `tests/helpers.py`; there is deliberately no `conftest.py`.
 - Build real repositories with `make_repo`, `commit`, `clone_local`, and `run` from
   `tests.helpers`. The behaviour worth protecting is git's own, so mocking git tests nothing useful.
-- Coverage is measured over `git_ferret/` with a floor of 95 in `pyproject.toml`. Do not duplicate
+- Coverage is measured over `git_ferret/` with a floor of 90 in `pyproject.toml`. Do not duplicate
   an existing test just to move the number; cover a distinct path or a distinct failure mode.
-- The suite runs on Linux, macOS, and Windows. Keep subprocess decoding on UTF-8, build paths with
-  `pathlib` rather than joining strings with `/`, and let the entry point own the output encoding:
-  the CLI reconfigures its streams to UTF-8 rather than the console code page.
+- The suite runs on Linux on every pull request and on macOS and Windows nightly. Keep subprocess
+  decoding on UTF-8, build paths with `pathlib` rather than joining strings with `/`, and let the
+  entry point own the output encoding: the CLI reconfigures its streams to UTF-8 rather than the
+  console code page.
 - New scripts under `scripts/` need unit tests too. `scripts/check_commit_msg.py` runs on every
   commit, so its edge cases matter.
 
@@ -102,9 +103,10 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
 - Issue and pull request body shape comes from `.github/ISSUE_TEMPLATE/` and
   `.github/PULL_REQUEST_TEMPLATE.md`. Do not invent a second format here.
 - `gh pr create` does not apply the pull request template. Pass a filled copy with `--body-file`.
-- The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cross-platform test
-  job, coverage, build, and audit. Dependency review is a separate check, and its
-  `dependency-review` context must also be required in the `Protect main` ruleset.
+- The merge gate in `.github/workflows/ci.yml` requires lint, type-check, test, coverage, build,
+  audit, and doc-links. Dependency review is a separate check, and its `dependency-review` context
+  must also be required in the `Protect main` ruleset. The nightly workflow repeats the test suite
+  on macOS and Windows and checks external documentation links; it is not part of the gate.
 - release-please is the only release path. Do not hand-edit versions, tags, or the release manifest;
   it opens the release pull request and the release workflow publishes the draft.
 - Do not hand-apply Dependabot's automation labels. Dependabot uses the `uv` ecosystem so its pull

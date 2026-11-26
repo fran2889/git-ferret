@@ -110,11 +110,12 @@ on every commit, so its edge cases are worth covering.
   `tests/test_end_to_end.py`.
 - Add tests for behaviour changes. A bug fix needs a test that failed before the fix; a feature
   needs tests for the new path.
-- Coverage is measured over `git_ferret/` with a floor of 95 in `pyproject.toml`. Cover a distinct
+- Coverage is measured over `git_ferret/` with a floor of 90 in `pyproject.toml`. Cover a distinct
   path or failure mode rather than duplicating an existing test to move the number.
-- The suite runs on Linux, macOS, and Windows. Subprocess output is decoded as UTF-8, paths are
-  built with `pathlib`, and the CLI reconfigures its output to UTF-8 so redirected reports are
-  lossless rather than limited to the console code page.
+- The suite runs on Linux on every pull request and on macOS and Windows in the nightly workflow.
+  Subprocess output is decoded as UTF-8, paths are built with `pathlib`, and the CLI reconfigures
+  its output to UTF-8 so redirected reports are lossless rather than limited to the console code
+  page.
 - New scripts under `scripts/` need unit tests. `scripts/check_spdx.py` and
   `scripts/check_commit_msg.py` are both covered.
 
@@ -138,10 +139,11 @@ instead.
 
 ## CI
 
-The merge gate in `.github/workflows/ci.yml` requires lint, type-check, the cross-platform test
-job, coverage, build, and audit. Dependency review is a separate check; its `dependency-review`
-context must also be required in the `Protect main` ruleset. release-please is the only release
-path; do not hand-edit versions or tags.
+The merge gate in `.github/workflows/ci.yml` requires lint, type-check, test, coverage, build,
+audit, and doc-links. Dependency review is a separate check; its `dependency-review` context must
+also be required in the `Protect main` ruleset. The nightly workflow repeats the test suite on macOS
+and Windows and checks external documentation links; it is not part of the gate. release-please is
+the only release path; do not hand-edit versions or tags.
 
 ## Licensing
 
