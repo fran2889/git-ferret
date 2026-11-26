@@ -175,6 +175,8 @@ Changes landed after this comparison:
   a run on `main`.
 - The distribution upload and the custom coverage summary script were removed. Coverage is
   reported by pytest-cov in the job log and by the uploaded `coverage.xml` and `htmlcov/` artifact.
+- Both repositories now run zizmor over their workflows. git-ferret also stopped persisting
+  checkout credentials and now checks the pull request author rather than `github.actor`.
 - Still open in git-ferret: a nightly run against a newer git or Python, and PR-title validation.
 - Release publishing was then simplified to run only in the run that creates the release, from the
   triggering commit rather than a second tag checkout. A failed build is repaired by hand rather

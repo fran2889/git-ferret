@@ -479,10 +479,10 @@ checked-in git hooks, the testing philosophy, and the pull request process.
 
 CI runs the test suite on Python 3.14 on Linux for every pull request; a nightly workflow repeats
 it on macOS and Windows. The remaining checks run on Linux: formatting, linting, the SPDX header
-check, workflow linting, pyright, coverage, a wheel build with a CLI smoke test, a dependency
-review on pull requests, and a `pip-audit` scan. Documentation links are checked offline on pull
-requests; the nightly run also checks external URLs. Releases are cut by release-please from
-Conventional Commits.
+check, workflow linting and security scanning, pyright, coverage, a wheel build with a CLI smoke
+test, a dependency review on pull requests, and a `pip-audit` scan. Documentation links are checked
+offline on pull requests; the nightly run also checks external URLs. Releases are cut by
+release-please from Conventional Commits.
 
 ## Licence
 
