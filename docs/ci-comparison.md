@@ -173,6 +173,8 @@ Changes landed after this comparison:
   GitHub App token for release-please, and a nightly macOS and Windows test run. Coverage now
   includes branches, with a floor of 90 for statements and branches together. CI no longer cancels
   a run on `main`.
+- The distribution upload and the custom coverage summary script were removed. Coverage is
+  reported by pytest-cov in the job log and by the uploaded `coverage.xml` and `htmlcov/` artifact.
 - Still open in git-ferret: a nightly run against a newer git or Python, and PR-title validation.
 - flix-monkey is unchanged.
 

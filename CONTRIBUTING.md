@@ -129,7 +129,7 @@ on every commit, so its edge cases are worth covering.
 - `git_ferret/analysis/`: the verdicts for `local`, `remote`, and `merged`.
 - `git_ferret/report.py`: markdown rendering and the TTY-only rich path.
 - `tests/`: the suite and its fixture builders.
-- `scripts/`: coverage summary, commit-message checker, and SPDX checker.
+- `scripts/`: commit-message checker and SPDX checker.
 - `.github/`: CI, release automation, and the issue and pull request templates.
 
 ## Documentation

@@ -89,8 +89,6 @@ jobs:
               with:
                   extras: test
             - run: make coverage PYTHON=python
-            - name: Summarise coverage in the run summary
-              run: python scripts/coverage_summary.py >> "$GITHUB_STEP_SUMMARY"
             - name: Upload coverage results
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
@@ -115,12 +113,6 @@ jobs:
                   uv pip install --python .wheel-smoke/bin/python dist/*.whl
                   .wheel-smoke/bin/git-ferret --version
                   .wheel-smoke/bin/git-ferret --help
-            - name: Upload distributions
-              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-              with:
-                  name: dist
-                  path: dist/
-                  retention-days: 7
 
     audit:
         runs-on: ubuntu-latest

@@ -120,7 +120,7 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
 - `git_ferret/`: the package. `cli.py` is the entry point, `gitcmd.py` is the only module that
   shells out to git, `report.py` renders the markdown, and `analysis/` holds the verdicts.
 - `tests/`: the suite plus `tests/helpers.py`, the real-repository fixture builders.
-- `scripts/`: `coverage_summary.py`, `check_commit_msg.py`, and `check_spdx.py`.
+- `scripts/`: `check_commit_msg.py` and `check_spdx.py`.
 - `.githooks/`: `commit-msg`, `pre-commit`, and `pre-push`, which chain to any global hooks.
 - `.github/`: workflows, the composite setup action, issue and pull request templates, and
   Dependabot configuration.
