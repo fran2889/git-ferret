@@ -160,6 +160,28 @@ def test_list_branches_reports_behind_when_remote_moved(tmp_path: Path):
     assert branches["feat"].ahead == 0
 
 
+def test_list_branches_names_a_branch_that_shares_a_tag_name(tmp_path: Path):
+    # %(refname:short) lengthens to heads/feat when a tag also named feat
+    # exists, which hides the branch's real name and its configured upstream.
+    src = make_repo(tmp_path / "src")
+    (src / "f.txt").write_text("a\n")
+    commit(src, "base")
+    run(src, "branch", "feat")
+    run(src, "tag", "feat")
+    clone = clone_local(src, tmp_path / "clone")
+    run(clone, "branch", "--track", "feat", "origin/feat")
+    run(src, "checkout", "feat")
+    (src / "f.txt").write_text("a\nremote\n")
+    commit(src, "remote work")
+    run(src, "checkout", "main")
+    fetch_all(clone)
+
+    branch = {b.name: b for b in list_branches(clone)}["feat"]
+    assert branch.remote == "origin"
+    assert branch.upstream == "origin/feat"
+    assert branch.behind == 1
+
+
 def test_gone_upstream_branch_still_counts_as_having_an_upstream(tmp_path: Path):
     # A deleted upstream is a different finding from no upstream at all;
     # conflating them would hide the deletion this tool exists to report.
