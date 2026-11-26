@@ -1,0 +1,48 @@
+name: Nightly
+
+on:
+    schedule:
+        - cron: '0 3 * * *' # 03:00 UTC daily
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+concurrency:
+    group: nightly
+    cancel-in-progress: false
+
+jobs:
+    # Linux runs in ci.yml, so the nightly only adds the two operating systems
+    # the merge gate does not touch.
+    test:
+        runs-on: ${{ matrix.os }}
+        timeout-minutes: 20
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [macos-latest, windows-latest]
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            - uses: ./.github/actions/setup
+              with:
+                  extras: test
+            # pytest directly rather than `make test`: GNU make is not part of
+            # the Windows image.
+            - run: python -m pytest
+
+    external-doc-links:
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  persist-credentials: false
+            - name: Check external documentation links
+              uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+              with:
+                  args: >-
+                      --config .lychee.toml
+                      --offline=false
+                      '*.md' docs .github
+                  fail: true

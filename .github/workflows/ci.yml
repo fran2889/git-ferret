@@ -11,7 +11,9 @@ permissions:
 
 concurrency:
     group: ci-${{ github.ref }}
-    cancel-in-progress: true
+    # Supersede older pull request runs, but let a main run finish: cancelling
+    # it would leave the commit without the gate result it promised.
+    cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
     lint:
@@ -22,7 +24,31 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: lint
+            # pyflakes is off; it would add a tool install for no useful check
+            # on these workflows.
+            - name: Lint workflows
+              uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
+              with:
+                  version: '1.7.12'
+                  pyflakes: false
             - run: make format-check lint check-spdx PYTHON=python
+
+    doc-links:
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        steps:
+            - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  # The check reads files, not the API; keep the token out of
+                  # the worktree.
+                  persist-credentials: false
+            - name: Check documentation links
+              uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+              with:
+                  args: >-
+                      --config .lychee.toml
+                      '*.md' docs .github
+                  fail: true
 
     type-check:
         runs-on: ubuntu-latest
@@ -35,26 +61,15 @@ jobs:
             - run: make typecheck PYTHON=python
 
     test:
-        runs-on: ${{ matrix.os }}
-        timeout-minutes: 15
-        strategy:
-            fail-fast: false
-            matrix:
-                # One interpreter on purpose: requires-python is >=3.14, so
-                # this is the only version the package claims to work on. Add
-                # a row only alongside a requires-python change that admits
-                # it. The three operating systems are the portability suite.
-                os: [ubuntu-latest, macos-latest, windows-latest]
-                python-version: ['3.14']
+        runs-on: ubuntu-latest
+        timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+            # macOS and Windows run in nightly.yml; this job is the Linux gate
+            # every pull request has to pass.
             - uses: ./.github/actions/setup
               with:
-                  python-version: ${{ matrix.python-version }}
                   extras: test
-            # pytest directly rather than `make test`: GNU make is not part
-            # of the Windows image, and this is the one job that has to run
-            # on all three operating systems.
             - run: python -m pytest
 
     coverage:
@@ -66,8 +81,6 @@ jobs:
               with:
                   extras: test
             - run: make coverage PYTHON=python
-            - name: Summarise coverage in the run summary
-              run: python scripts/coverage_summary.py >> "$GITHUB_STEP_SUMMARY"
             - name: Upload coverage results
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
@@ -92,12 +105,6 @@ jobs:
                   uv pip install --python .wheel-smoke/bin/python dist/*.whl
                   .wheel-smoke/bin/git-ferret --version
                   .wheel-smoke/bin/git-ferret --help
-            - name: Upload distributions
-              uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-              with:
-                  name: dist
-                  path: dist/
-                  retention-days: 7
 
     audit:
         runs-on: ubuntu-latest
@@ -113,7 +120,7 @@ jobs:
     merge-gate:
         runs-on: ubuntu-latest
         if: always()
-        needs: [lint, type-check, test, coverage, build, audit]
+        needs: [lint, doc-links, type-check, test, coverage, build, audit]
         steps:
             - name: Check for failures
               if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
