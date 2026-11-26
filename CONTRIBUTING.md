@@ -110,8 +110,9 @@ on every commit, so its edge cases are worth covering.
   `tests/test_end_to_end.py`.
 - Add tests for behaviour changes. A bug fix needs a test that failed before the fix; a feature
   needs tests for the new path.
-- Coverage is measured over `git_ferret/` with a floor of 90 in `pyproject.toml`. Cover a distinct
-  path or failure mode rather than duplicating an existing test to move the number.
+- Coverage is measured over `git_ferret/`, including branch coverage, with a floor of 90 in
+  `pyproject.toml`. Cover a distinct path or failure mode rather than duplicating an existing test
+  to move the number.
 - The suite runs on Linux on every pull request and on macOS and Windows in the nightly workflow.
   Subprocess output is decoded as UTF-8, paths are built with `pathlib`, and the CLI reconfigures
   its output to UTF-8 so redirected reports are lossless rather than limited to the console code

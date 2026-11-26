@@ -170,8 +170,9 @@ description-sync workflows have no git-ferret analogue; they are product-specifi
 Changes landed after this comparison:
 
 - git-ferret added actionlint, lychee (local links on pull requests, remote links nightly), a
-  GitHub App token for release-please, and a nightly macOS and Windows test run. The coverage floor
-  dropped from 95 to 90 to match flix-monkey.
+  GitHub App token for release-please, and a nightly macOS and Windows test run. Coverage now
+  includes branches, with a floor of 90 for statements and branches together. CI no longer cancels
+  a run on `main`.
 - Still open in git-ferret: a nightly run against a newer git or Python, and PR-title validation.
 - flix-monkey is unchanged.
 

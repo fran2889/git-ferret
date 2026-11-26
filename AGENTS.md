@@ -89,8 +89,9 @@ hook runs `make typecheck test`, and the pre-commit hook formats and lints stage
   fixture builders live in `tests/helpers.py`; there is deliberately no `conftest.py`.
 - Build real repositories with `make_repo`, `commit`, `clone_local`, and `run` from
   `tests.helpers`. The behaviour worth protecting is git's own, so mocking git tests nothing useful.
-- Coverage is measured over `git_ferret/` with a floor of 90 in `pyproject.toml`. Do not duplicate
-  an existing test just to move the number; cover a distinct path or a distinct failure mode.
+- Coverage is measured over `git_ferret/`, including branch coverage, with a floor of 90 in
+  `pyproject.toml`. Do not duplicate an existing test just to move the number; cover a distinct
+  path or a distinct failure mode.
 - The suite runs on Linux on every pull request and on macOS and Windows nightly. Keep subprocess
   decoding on UTF-8, build paths with `pathlib` rather than joining strings with `/`, and let the
   entry point own the output encoding: the CLI reconfigures its streams to UTF-8 rather than the

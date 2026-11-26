@@ -78,12 +78,15 @@ reportMissingTypeStubs = false
 
 [tool.coverage.run]
 source = ["git_ferret"]
+# Branch coverage as well as statements: a line that only ever takes one side
+# of a condition is not evidence that the other side works.
+branch = true
 
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# The suite is at 99.1%, so 90 is a floor that still catches a large drop. The
-# threshold matches flix-monkey's coverage gate. CI runs only 3.14, the version
-# this number was measured on, so there is no cross-version drift left to
-# absorb.
+# The suite is at 99.1% of statements and 98.7% including branches, so 90 is a
+# floor that still catches a large drop. The threshold matches flix-monkey's
+# coverage gate. CI runs only 3.14, the version this number was measured on,
+# so there is no cross-version drift left to absorb.
 fail_under = 90
