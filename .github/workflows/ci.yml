@@ -11,9 +11,8 @@ permissions:
 
 concurrency:
     group: ci-${{ github.ref }}
-    # A newer pull request run supersedes the older one. A push to main runs to
-    # completion: cancelling it would leave the commit without the result its
-    # merge gate promised.
+    # Supersede older pull request runs, but let a main run finish: cancelling
+    # it would leave the commit without the gate result it promised.
     cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -25,12 +24,8 @@ jobs:
             - uses: ./.github/actions/setup
               with:
                   extras: lint
-            # actionlint checks the workflow files themselves: expressions,
-            # action inputs, and the shell in run steps. The SHA pins the
-            # action release; `version` pins the actionlint binary it runs.
-            # pyflakes is off to keep the step free of an extra pip install;
-            # the only inline Python in these workflows is the short heredoc
-            # in release-please.yml.
+            # pyflakes is off; it would add a tool install for no useful check
+            # on these workflows.
             - name: Lint workflows
               uses: raven-actions/actionlint@3d39aea434753780c3b3d4a1a31c854b4dbf49d7 # v2.2.0
               with:
@@ -44,14 +39,12 @@ jobs:
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
               with:
-                  # The action reads the files, not the API. Leave no token in
+                  # The check reads files, not the API; keep the token out of
                   # the worktree.
                   persist-credentials: false
             - name: Check documentation links
               uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
               with:
-                  # Offline mode is the default in .lychee.toml: local files and
-                  # heading anchors are checked here, remote URLs nightly.
                   args: >-
                       --config .lychee.toml
                       '*.md' docs .github
@@ -72,9 +65,8 @@ jobs:
         timeout-minutes: 10
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            # The setup action defaults to Python 3.14, the only interpreter
-            # requires-python admits. macOS and Windows run in nightly.yml;
-            # this job is the Linux gate every pull request has to pass.
+            # macOS and Windows run in nightly.yml; this job is the Linux gate
+            # every pull request has to pass.
             - uses: ./.github/actions/setup
               with:
                   extras: test

@@ -13,9 +13,8 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
-    # Linux runs on every push and pull request in ci.yml, so the nightly only
-    # adds the two operating systems the merge gate does not touch. A failure
-    # here is a portability regression, not a blocker for an unrelated PR.
+    # Linux runs in ci.yml, so the nightly only adds the two operating systems
+    # the merge gate does not touch.
     test:
         runs-on: ${{ matrix.os }}
         timeout-minutes: 20
@@ -25,8 +24,6 @@ jobs:
                 os: [macos-latest, windows-latest]
         steps:
             - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-            # The setup action defaults to Python 3.14, the only interpreter
-            # requires-python admits.
             - uses: ./.github/actions/setup
               with:
                   extras: test
@@ -44,8 +41,6 @@ jobs:
             - name: Check external documentation links
               uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
               with:
-                  # Override the offline default from .lychee.toml so remote
-                  # URLs are checked once a day instead of on every pull request.
                   args: >-
                       --config .lychee.toml
                       --offline=false
