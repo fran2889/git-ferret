@@ -176,6 +176,9 @@ Changes landed after this comparison:
 - The distribution upload and the custom coverage summary script were removed. Coverage is
   reported by pytest-cov in the job log and by the uploaded `coverage.xml` and `htmlcov/` artifact.
 - Still open in git-ferret: a nightly run against a newer git or Python, and PR-title validation.
+- Release publishing was then simplified to run only in the run that creates the release, from the
+  triggering commit rather than a second tag checkout. A failed build is repaired by hand rather
+  than by re-running. That removes the retry advantage described above.
 - flix-monkey is unchanged.
 
 The comparison above stays as the snapshot at the commits named at the top.
