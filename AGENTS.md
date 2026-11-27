@@ -24,30 +24,18 @@ system interpreter and will not find ruff or pyright; run `uv run --no-sync make
 |---|---|
 | `uv sync --all-extras --locked` | Install the project and every dev extra from `uv.lock` |
 | `make install` | The pip equivalent, installing all extras |
-| `make sync` | `uv sync --all-extras --locked` |
 | `make hooks` | Set this repository's `core.hooksPath` to `.githooks` |
-| `make format` / `make format-check` | Format, or check formatting, with ruff |
-| `make lint` / `make lint-fix` | Lint, or lint and apply safe fixes |
-| `make check-spdx` | Check the SPDX header on every Python source file |
-| `make typecheck` | Run pyright in strict mode |
-| `make test` | Run the pytest suite |
-| `make coverage` | Run the suite with terminal, XML, and HTML coverage reports |
-| `make build` | Build the sdist and wheel, then run `twine check` |
-| `make audit` | Scan dependencies with `pip-audit` |
-| `make check` | format-check, lint, check-spdx, typecheck, and test |
-| `make workflow-lint` | Lint the workflow files with actionlint |
-| `make workflow-security` | Audit the workflows with zizmor, offline |
-| `make doc-links` | Check documentation links with lychee |
+| `make help` | List every target; the `Makefile` is authoritative |
+| `make check` | The fast local gate |
 | `make ci` | The CI checks that can run locally |
-| `make help` | List the targets |
 
-`make check` is the fast gate and is what a pull request must pass; `make ci` is the full local
-gate and adds coverage, build, audit, workflow linting and security, and documentation links. Run
-`make check` before claiming a change is complete, and `make ci` when you touched dependencies,
-packaging, workflows, documentation, or code whose coverage matters. The workflow tools are
-installed separately: actionlint 1.7.12, zizmor 1.33 or newer, and lychee 0.24 or newer. The
-nightly macOS and Windows runs and the GitHub dependency review are CI-only. The pre-push hook runs
-`make typecheck test`, and the pre-commit hook formats and lints staged Python files.
+`make check` is the fast gate and is what a pull request must pass; `make ci` runs every CI check
+that can run locally. Run `make check` before claiming a change is complete, and `make ci` when you
+touched dependencies, packaging, workflows, documentation, or code whose coverage matters. The
+workflow tools are installed separately: actionlint 1.7.12, zizmor 1.33 or newer, and lychee 0.24
+or newer. The nightly macOS and Windows runs and the GitHub dependency review are CI-only. The
+pre-push hook runs `make typecheck test`, and the pre-commit hook formats and lints staged Python
+files.
 
 ## Hard constraints
 
@@ -110,10 +98,11 @@ nightly macOS and Windows runs and the GitHub dependency review are CI-only. The
 - Issue and pull request body shape comes from `.github/ISSUE_TEMPLATE/` and
   `.github/PULL_REQUEST_TEMPLATE.md`. Do not invent a second format here.
 - `gh pr create` does not apply the pull request template. Pass a filled copy with `--body-file`.
-- The merge gate in `.github/workflows/ci.yml` requires lint, type-check, test, coverage, build,
-  audit, and doc-links. Dependency review is a separate check, and its `dependency-review` context
-  must also be required in the `Protect main` ruleset. The nightly workflow repeats the test suite
-  on macOS and Windows and checks external documentation links; it is not part of the gate.
+- The merge gate is the `merge-gate` job in `.github/workflows/ci.yml`; its `needs` list is the
+  authoritative set of required jobs. Dependency review is a separate check, and its
+  `dependency-review` context must also be required in the `Protect main` ruleset. The nightly
+  workflow repeats the test suite on macOS and Windows and checks external documentation links; it
+  is not part of the gate.
 - release-please is the only release path. Do not hand-edit versions, tags, or the release manifest;
   it opens the release pull request and the release workflow publishes the draft.
 - Do not hand-apply Dependabot's automation labels. Dependabot uses the `uv` ecosystem so its pull
