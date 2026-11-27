@@ -115,11 +115,7 @@ jobs:
                   extras: build
             - run: make build PYTHON=python
             - name: Smoke-test the wheel
-              run: |
-                  uv venv .wheel-smoke
-                  uv pip install --python .wheel-smoke/bin/python dist/*.whl
-                  .wheel-smoke/bin/git-ferret --version
-                  .wheel-smoke/bin/git-ferret --help
+              run: python scripts/smoke_wheel.py
 
     audit:
         runs-on: ubuntu-latest

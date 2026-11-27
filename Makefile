@@ -8,7 +8,7 @@ SOURCES := git_ferret tests scripts
 # group cannot be added to pyproject.toml and forgotten here.
 EXTRAS := audit,build,lint,test,type
 
-.PHONY: help install sync hooks format format-check lint lint-fix check-spdx typecheck test coverage build audit workflow-lint workflow-security doc-links clean check check-full
+.PHONY: help install sync hooks format format-check lint lint-fix check-spdx typecheck test coverage build smoke audit workflow-lint workflow-security doc-links clean check check-full
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -53,6 +53,9 @@ build: ## Build the sdist and wheel
 	$(PYTHON) -m build
 	$(PYTHON) -m twine check dist/*
 
+smoke: build ## Install the built wheel in a fresh environment and run it
+	$(PYTHON) scripts/smoke_wheel.py
+
 # Two passes, because neither alone is enough. Given a project path, pip-audit
 # resolves `[project.dependencies]` only, so every tool installed from the extras
 # is invisible to it. `--local` audits what is actually installed, which in CI
@@ -78,4 +81,4 @@ clean: ## Remove build artifacts and caches
 
 check: format-check lint check-spdx typecheck test ## Run the fast local checks
 
-check-full: format-check lint check-spdx workflow-lint workflow-security doc-links typecheck coverage build audit ## Run the full local CI gate
+check-full: format-check lint check-spdx workflow-lint workflow-security doc-links typecheck coverage build smoke audit ## Run the full local CI gate

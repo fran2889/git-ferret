@@ -1,4 +1,8 @@
 # SPDX-FileCopyrightText: 2026 Fran
 # SPDX-License-Identifier: GPL-3.0-only
 
-__version__ = "0.1.0"
+"""Version metadata for git-ferret."""
+
+from importlib.metadata import version
+
+__version__ = version("git-ferret")

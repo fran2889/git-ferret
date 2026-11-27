@@ -33,9 +33,10 @@ system interpreter and will not find ruff or pyright; run `uv run --no-sync make
 that can run locally. Run `make check` before claiming a change is complete, and `make check-full` when you
 touched dependencies, packaging, workflows, documentation, or code whose coverage matters. The
 workflow tools are installed separately: actionlint 1.7.12, zizmor 1.33 or newer, and lychee 0.24
-or newer. The nightly macOS and Windows runs and the GitHub dependency review are CI-only. The
-pre-push hook runs `make typecheck test`, and the pre-commit hook formats and lints staged Python
-files.
+or newer. The full gate also installs the built wheel in a temporary environment and reaches the
+network for the audit. The nightly macOS and Windows runs and the GitHub dependency review are
+CI-only. The pre-push hook runs `make typecheck test`, and the pre-commit hook formats and lints
+staged Python files.
 
 ## Hard constraints
 
