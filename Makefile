@@ -8,7 +8,7 @@ SOURCES := git_ferret tests scripts
 # group cannot be added to pyproject.toml and forgotten here.
 EXTRAS := audit,build,lint,test,type
 
-.PHONY: help install sync hooks format format-check lint lint-fix check-spdx typecheck test coverage build audit workflow-lint workflow-security doc-links clean check ci
+.PHONY: help install sync hooks format format-check lint lint-fix check-spdx typecheck test coverage build audit workflow-lint workflow-security doc-links clean check check-full
 
 help: ## Show this help
 	@echo "Usage: make <target>"
@@ -78,4 +78,4 @@ clean: ## Remove build artifacts and caches
 
 check: format-check lint check-spdx typecheck test ## Run the fast local checks
 
-ci: format-check lint check-spdx workflow-lint workflow-security doc-links typecheck coverage build audit ## Run the CI checks that can run locally
+check-full: format-check lint check-spdx workflow-lint workflow-security doc-links typecheck coverage build audit ## Run the full local CI gate

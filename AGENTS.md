@@ -27,10 +27,10 @@ system interpreter and will not find ruff or pyright; run `uv run --no-sync make
 | `make hooks` | Set this repository's `core.hooksPath` to `.githooks` |
 | `make help` | List every target; the `Makefile` is authoritative |
 | `make check` | The fast local gate |
-| `make ci` | The CI checks that can run locally |
+| `make check-full` | The full local CI gate |
 
-`make check` is the fast gate and is what a pull request must pass; `make ci` runs every CI check
-that can run locally. Run `make check` before claiming a change is complete, and `make ci` when you
+`make check` is the fast gate and is what a pull request must pass; `make check-full` runs every CI check
+that can run locally. Run `make check` before claiming a change is complete, and `make check-full` when you
 touched dependencies, packaging, workflows, documentation, or code whose coverage matters. The
 workflow tools are installed separately: actionlint 1.7.12, zizmor 1.33 or newer, and lychee 0.24
 or newer. The nightly macOS and Windows runs and the GitHub dependency review are CI-only. The

@@ -2,7 +2,7 @@
 How to use this template
 
 - CI runs the `merge-gate` job in `.github/workflows/ci.yml`. Run `make check`
-  for fast feedback, or `make ci` for the local equivalents.
+  for fast feedback, or `make check-full` for the local equivalents.
 - Tick the manual box only after performing the check. If someone else did, say
   who.
 - Delete a heading that does not apply rather than leaving it empty.

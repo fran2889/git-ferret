@@ -477,7 +477,7 @@ $ diff ~/reports/yesterday.md ~/reports/today.md
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup with the development extras, the Make targets, the
 checked-in git hooks, the testing philosophy, and the pull request process.
 
-CI is defined in `.github/workflows/ci.yml`; `make ci` runs the checks that can run locally, and
+CI is defined in `.github/workflows/ci.yml`; `make check-full` runs the checks that can run locally, and
 CONTRIBUTING.md explains the workflow. A nightly workflow runs the tests on macOS and Windows and
 checks external documentation links. Releases are cut by release-please from Conventional Commits.
 
