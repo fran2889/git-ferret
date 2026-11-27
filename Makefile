@@ -1,16 +1,19 @@
 .DEFAULT_GOAL := help
 PYTHON ?= python3
+ACTIONLINT ?= actionlint
+LYCHEE ?= lychee
+ZIZMOR ?= zizmor
 SOURCES := git_ferret tests scripts
 # Every optional-dependency group in pyproject.toml. Kept in one place so a new
 # group cannot be added to pyproject.toml and forgotten here.
 EXTRAS := audit,build,lint,test,type
 
-.PHONY: help install sync hooks format format-check lint lint-fix check-spdx typecheck test coverage build audit clean check ci
+.PHONY: help install sync hooks format format-check lint lint-fix check-spdx typecheck test coverage build audit workflow-lint workflow-security doc-links clean check check-full
 
 help: ## Show this help
 	@echo "Usage: make <target>"
 	@echo
-	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-14s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
 install: ## Install the package and dev tools (editable, with pip)
 	$(PYTHON) -m pip install -e ".[$(EXTRAS)]"
@@ -61,9 +64,18 @@ audit: ## Audit dependencies for known vulnerabilities
 	$(PYTHON) -m pip_audit . --skip-editable --strict --progress-spinner off
 	$(PYTHON) -m pip_audit --local --skip-editable --progress-spinner off
 
+workflow-lint: ## Lint the workflow files with actionlint
+	$(ACTIONLINT)
+
+workflow-security: ## Audit the workflows with zizmor, offline
+	$(ZIZMOR) --offline .
+
+doc-links: ## Check documentation links with lychee
+	$(LYCHEE) --config .lychee.toml '*.md' docs .github
+
 clean: ## Remove build artifacts and caches
 	rm -rf build dist .pytest_cache .ruff_cache htmlcov .coverage coverage.xml
 
 check: format-check lint check-spdx typecheck test ## Run the fast local checks
 
-ci: format-check lint check-spdx typecheck coverage build audit ## Run everything the CI pipeline checks
+check-full: format-check lint check-spdx workflow-lint workflow-security doc-links typecheck coverage build audit ## Run the full local CI gate
