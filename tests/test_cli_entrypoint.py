@@ -15,6 +15,7 @@ import io
 import os
 import subprocess
 import sys
+from importlib.metadata import version
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,10 @@ def test_version_is_printed_without_running_a_scan(capsys: pytest.CaptureFixture
     # and without touching a repository.
     assert _main(["--version"]) == 0
     assert capsys.readouterr().out.strip() == f"git-ferret {__version__}"
+
+
+def test_version_matches_the_installed_distribution():
+    assert __version__ == version("git-ferret")
 
 
 def test_version_still_works_when_git_cannot_run(

@@ -84,7 +84,8 @@ on every commit, so its edge cases are worth covering.
 - A pull request title is squash-merged and parsed by release-please, so it must also be a
   Conventional Commit.
 - Run `make check` before pushing. `make check-full` runs the CI checks that can run locally; it needs
-  actionlint, zizmor, and lychee on `PATH` and is slower.
+  actionlint, zizmor, and lychee on `PATH`, installs the built wheel, reaches the network, and is
+  slower.
 - Fill in `.github/PULL_REQUEST_TEMPLATE.md`. `gh pr create` does not apply the template
   automatically; pass a filled copy with `--body-file`. Keep the Summary to one to three bullets,
   one behaviour change each, and name the automated check plus any manual command in the Test Plan.
